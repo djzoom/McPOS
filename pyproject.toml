@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "test_run"
+version = "0.1.0"
+description = "A structured and reproducible coding framework for creative automation, web apps, and media tools."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Zhong Wang" }]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.2.0"]

@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+
+# Environments
+.venv/
+env/
+venv/
+
+# Editors
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Node
+node_modules/
+yarn.lock
+package-lock.json
+
+# Build
+dist/
+build/
