@@ -27,18 +27,19 @@ export const useChannelStore = create<ChannelState>((set) => ({
   
   updateChannelStatus: (channelId, status, progress) =>
     set((state) => ({
-      channels: state.channels.map((ch) =>
-        ch.id === channelId
-          ? {
-              ...ch,
-              currentTask: {
-                ...ch.currentTask,
-                status,
-                progress: progress ?? ch.currentTask?.progress,
-              },
-            }
-          : ch
-      ),
+      channels: state.channels.map((ch): Channel => {
+        if (ch.id === channelId) {
+          return {
+            ...ch,
+            currentTask: {
+              id: ch.currentTask?.id || '',
+              status: status as 'pending' | 'processing' | 'uploading' | 'completed' | 'failed',
+              progress: progress ?? ch.currentTask?.progress,
+            },
+          }
+        }
+        return ch
+      }),
     })),
 }))
 

@@ -38,7 +38,7 @@ export function PlanAndRun() {
                   })
                   setRecipe(result)
                   // Refresh KPIs after successful plan
-                  if (result.status === 'ok') {
+                  if (result?.status === 'ok') {
                     // Trigger scan refresh to update KPIs
                     useT2RScheduleStore.getState().setLoading(false)
                   }

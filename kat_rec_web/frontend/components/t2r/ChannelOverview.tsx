@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { scanSchedule } from '@/services/t2rApi'
 import { useT2RScheduleStore } from '@/stores/t2rScheduleStore'
@@ -11,6 +11,8 @@ import { Lock, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react'
 export function ChannelOverview() {
   const { lockedCount, conflicts, setLockedCount, setConflicts, setLoading } = useT2RScheduleStore()
   const { assetUsage } = useT2RAssetsStore()
+  const [totalEpisodes, setTotalEpisodes] = useState(0)
+  const [duplicateImages, setDuplicateImages] = useState(0)
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['t2r-scan'],
@@ -21,10 +23,26 @@ export function ChannelOverview() {
   useEffect(() => {
     if (data?.status === 'ok') {
       setLockedCount(data.summary?.locked_count || data.data?.locked_count || 0)
-      setConflicts(data.summary?.conflicts || data.data?.conflicts || [])
+      // Convert API conflicts to store conflicts format
+      const apiConflicts = data.summary?.conflicts || data.data?.conflicts || []
+      const storeConflicts = apiConflicts.map((c: any) => ({
+        type: c.type || 'unknown',
+        asset: c.asset || '',
+        episodes: c.episodes || [],
+        severity: 'warning' as const, // Default severity
+      }))
+      setConflicts(storeConflicts)
       // Update asset usage from scan result
       if (data.summary?.asset_usage) {
-        useT2RAssetsStore.getState().setAssetUsage(data.summary.asset_usage)
+        const assetUsageData = {
+          images: data.summary.asset_usage.images || {},
+          songs: data.summary.asset_usage.songs || {},
+          episodes: data.summary.asset_usage.episodes || {},
+        }
+        useT2RAssetsStore.getState().setAssetUsage(assetUsageData)
+        // Extract metadata
+        setTotalEpisodes(data.summary.asset_usage.total_episodes || 0)
+        setDuplicateImages(data.summary.asset_usage.duplicate_images || 0)
       }
     }
   }, [data, setLockedCount, setConflicts])
@@ -92,7 +110,7 @@ export function ChannelOverview() {
             <CheckCircle className="w-8 h-8 text-green-400" />
             <div>
               <div className="text-2xl font-bold">
-                {assetUsage?.total_episodes || 0}
+                {totalEpisodes}
               </div>
               <div className="text-sm text-dark-text-muted">总期数</div>
             </div>
@@ -109,7 +127,7 @@ export function ChannelOverview() {
             <RefreshCw className="w-8 h-8 text-purple-400" />
             <div>
               <div className="text-2xl font-bold">
-                {assetUsage?.duplicate_images || 0}
+                {duplicateImages}
               </div>
               <div className="text-sm text-dark-text-muted">重复图片</div>
             </div>

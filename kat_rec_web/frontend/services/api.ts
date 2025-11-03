@@ -35,36 +35,85 @@ export async function fetchChannel(channelId?: string) {
 }
 
 // Library endpoints
-export async function fetchSongs(params?: { search?: string; limit?: number }) {
-  const queryParams = new URLSearchParams()
-  if (params?.search) queryParams.set('search', params.search)
-  if (params?.limit) queryParams.set('limit', params.limit.toString())
-  
-  const query = queryParams.toString()
-  return apiRequest(`/api/library/songs${query ? `?${query}` : ''}`)
+export interface Song {
+  id: string
+  title: string
+  artist?: string
+  duration?: number
+  file_path?: string
 }
 
-export async function fetchImages(params?: { search?: string; limit?: number }) {
+export interface Image {
+  id: string
+  filename: string
+  path?: string
+  url?: string
+}
+
+export async function fetchSongs(params?: { search?: string; limit?: number }): Promise<Song[]> {
   const queryParams = new URLSearchParams()
   if (params?.search) queryParams.set('search', params.search)
   if (params?.limit) queryParams.set('limit', params.limit.toString())
   
   const query = queryParams.toString()
-  return apiRequest(`/api/library/images${query ? `?${query}` : ''}`)
+  return apiRequest<Song[]>(`/api/library/songs${query ? `?${query}` : ''}`)
+}
+
+export async function fetchImages(params?: { search?: string; limit?: number }): Promise<Image[]> {
+  const queryParams = new URLSearchParams()
+  if (params?.search) queryParams.set('search', params.search)
+  if (params?.limit) queryParams.set('limit', params.limit.toString())
+  
+  const query = queryParams.toString()
+  return apiRequest<Image[]>(`/api/library/images${query ? `?${query}` : ''}`)
 }
 
 // Metrics endpoints
-export async function fetchSummary(period: string = '24h') {
-  return apiRequest(`/metrics/summary?period=${period}`)
+export interface SummaryData {
+  global_state?: {
+    total_episodes: number
+    completed: number
+    error: number
+    remixing: number
+    rendering: number
+    pending: number
+  }
+  stages?: {
+    [key: string]: {
+      avg_duration: number
+      count: number
+    }
+  }
+  period?: string
 }
 
-export async function fetchEpisodes(params?: { status?: string; limit?: number }) {
+export async function fetchSummary(period: string = '24h'): Promise<SummaryData> {
+  return apiRequest<SummaryData>(`/metrics/summary?period=${period}`)
+}
+
+export interface Episode {
+  id: string
+  episode_id: string
+  episode_number?: number
+  status: 'pending' | 'remixing' | 'rendering' | 'uploading' | 'completed' | 'error'
+  schedule_date?: string
+  progress?: number
+  created_at?: string
+  updated_at?: string
+}
+
+export interface EpisodesResponse {
+  episodes: Episode[]
+  total?: number
+}
+
+export async function fetchEpisodes(params?: { status?: string; limit?: number }): Promise<EpisodesResponse> {
   const queryParams = new URLSearchParams()
   if (params?.status) queryParams.set('status', params.status)
   if (params?.limit) queryParams.set('limit', params.limit.toString())
   
   const query = queryParams.toString()
-  return apiRequest(`/metrics/episodes${query ? `?${query}` : ''}`)
+  return apiRequest<EpisodesResponse>(`/metrics/episodes${query ? `?${query}` : ''}`)
 }
 
 export async function fetchEvents(params?: { limit?: number; since?: string }) {
@@ -77,9 +126,17 @@ export async function fetchEvents(params?: { limit?: number; since?: string }) {
 }
 
 // Channels endpoints (for Channel Workbench)
-export async function fetchChannels() {
+export interface Channel {
+  id: string
+  name: string
+  isActive: boolean
+  nextSchedule?: string
+  queueCount?: number
+}
+
+export async function fetchChannels(): Promise<Channel[]> {
   // 尝试从 /api/channels 获取，如果失败则返回空数组
-  return apiRequest('/api/channels').catch(() => {
+  return apiRequest<Channel[]>('/api/channels').catch(() => {
     // 如果API不存在，返回空数组
     return []
   })
