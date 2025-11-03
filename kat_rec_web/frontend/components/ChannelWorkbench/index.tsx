@@ -5,9 +5,12 @@ import { useQuery } from '@tanstack/react-query'
 import { Virtuoso } from 'react-virtuoso'
 import { ChannelCard } from './ChannelCard'
 import { ViewControls } from './ViewControls'
-import { fetchChannels } from '@/services/api'
+import { fetchChannels, type Channel as ApiChannel } from '@/services/api'
 import { useChannelStore } from '@/stores/channelSlice'
-import type { Channel, ViewMode, DensityMode } from './types'
+import type { ViewMode, DensityMode } from './types'
+
+// Use Channel type from API service
+type Channel = ApiChannel
 
 export function ChannelWorkbench() {
   const [viewMode, setViewMode] = useState<ViewMode>('card')
