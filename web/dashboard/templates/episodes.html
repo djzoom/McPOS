@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>期数管理 - Kat Records</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+        
+        .navbar {
+            background: #2a2a2a;
+            border-bottom: 1px solid #333;
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 60px;
+            margin: -20px -20px 20px -20px;
+        }
+        
+        .navbar-brand {
+            font-size: 20px;
+            font-weight: bold;
+            color: #4a9eff;
+            text-decoration: none;
+        }
+        
+        .navbar-nav {
+            display: flex;
+            gap: 20px;
+            list-style: none;
+        }
+        
+        .navbar-nav a {
+            color: #aaa;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        
+        .navbar-nav a:hover {
+            background: #333;
+            color: #4a9eff;
+        }
+        
+        .navbar-nav a.active {
+            background: #4a9eff;
+            color: white;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: #4a9eff;
+            margin-bottom: 20px;
+        }
+        
+        .episode-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #2a2a2a;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .episode-table th,
+        .episode-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #333;
+        }
+        
+        .episode-table th {
+            background: #333;
+            color: #4a9eff;
+            font-weight: bold;
+        }
+        
+        .episode-table tr:hover {
+            background: #333;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .status-completed {
+            background: #4ade80;
+            color: #1a1a1a;
+        }
+        
+        .status-pending {
+            background: #888;
+            color: white;
+        }
+        
+        .status-error {
+            background: #f87171;
+            color: white;
+        }
+        
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-right: 5px;
+        }
+        
+        .btn-recover {
+            background: #f87171;
+            color: white;
+        }
+        
+        .btn-recover:hover {
+            background: #ef4444;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="navbar-brand">🎵 Kat Records</a>
+        <ul class="navbar-nav">
+            <li><a href="/">📊 仪表板</a></li>
+            <li><a href="/episodes" class="active">📋 期数管理</a></li>
+            <li><a href="/library">🎵 资源库</a></li>
+            <li><a href="/analytics">📈 数据分析</a></li>
+            <li><a href="/settings">⚙️ 设置</a></li>
+        </ul>
+    </nav>
+    
+    <div class="container">
+        <h1>📋 期数管理</h1>
+        
+        <table class="episode-table" id="episodes-table">
+            <thead>
+                <tr>
+                    <th>期数ID</th>
+                    <th>标题</th>
+                    <th>排播日期</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td colspan="5" style="text-align: center; padding: 40px;">
+                        加载中...
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    
+    <script>
+        const statusDisplay = {
+            'pending': { text: '待制作', class: 'status-pending' },
+            'remixing': { text: '制作中', class: 'status-pending' },
+            'rendering': { text: '渲染中', class: 'status-pending' },
+            'uploading': { text: '上传中', class: 'status-pending' },
+            'completed': { text: '已完成', class: 'status-completed' },
+            'error': { text: '失败', class: 'status-error' }
+        };
+        
+        async function loadEpisodes() {
+            try {
+                const response = await fetch('/metrics/episodes');
+                const data = await response.json();
+                
+                const tbody = document.querySelector('#episodes-table tbody');
+                tbody.innerHTML = '';
+                
+                if (data.episodes && data.episodes.length > 0) {
+                    data.episodes.forEach(ep => {
+                        const row = document.createElement('tr');
+                        const statusInfo = statusDisplay[ep.status] || { text: ep.status, class: 'status-pending' };
+                        
+                        row.innerHTML = `
+                            <td>${ep.episode_id || ep.episode_number}</td>
+                            <td>${ep.title || '--'}</td>
+                            <td>${ep.schedule_date || '--'}</td>
+                            <td><span class="status-badge ${statusInfo.class}">${statusInfo.text}</span></td>
+                            <td>
+                                ${ep.status === 'error' ? 
+                                    `<button class="btn btn-recover" onclick="recoverEpisode('${ep.episode_id}')">恢复</button>` : 
+                                    '--'
+                                }
+                            </td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">暂无期数数据</td></tr>';
+                }
+            } catch (error) {
+                console.error('加载期数失败:', error);
+                document.querySelector('#episodes-table tbody').innerHTML = 
+                    '<tr><td colspan="5" style="text-align: center; color: #f87171;">加载失败，请刷新重试</td></tr>';
+            }
+        }
+        
+        async function recoverEpisode(episodeId) {
+            if (!confirm(`确定要恢复期数 ${episodeId} 吗？`)) return;
+            
+            try {
+                const response = await fetch(`/api/recover/${episodeId}`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    alert('恢复成功！');
+                    loadEpisodes();
+                } else {
+                    alert('恢复失败：' + await response.text());
+                }
+            } catch (error) {
+                alert('恢复失败：' + error.message);
+            }
+        }
+        
+        // 初始加载
+        loadEpisodes();
+        
+        // 每30秒自动刷新
+        setInterval(loadEpisodes, 30000);
+    </script>
+</body>
+</html>
+

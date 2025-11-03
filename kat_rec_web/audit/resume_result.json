@@ -1,0 +1,25 @@
+{
+  "run_attempt": {
+    "request": {
+      "episode_id": "20251104",
+      "stages": [
+        "remix",
+        "render"
+      ],
+      "dry_run": false
+    },
+    "response": {
+      "detail": "Not Found"
+    },
+    "http_status": 404
+  },
+  "resume_attempt": {
+    "request": {
+      "run_id": "run_20251104_test"
+    },
+    "response": {
+      "detail": "Not Found"
+    },
+    "http_status": 404
+  }
+}

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Kat Records{% endblock %}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+        
+        /* 导航栏 */
+        .navbar {
+            background: #2a2a2a;
+            border-bottom: 1px solid #333;
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 60px;
+        }
+        
+        .navbar-brand {
+            font-size: 20px;
+            font-weight: bold;
+            color: #4a9eff;
+            text-decoration: none;
+        }
+        
+        .navbar-nav {
+            display: flex;
+            gap: 20px;
+            list-style: none;
+        }
+        
+        .navbar-nav a {
+            color: #aaa;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        
+        .navbar-nav a:hover {
+            background: #333;
+            color: #4a9eff;
+        }
+        
+        .navbar-nav a.active {
+            background: #4a9eff;
+            color: white;
+        }
+        
+        /* 主内容区 */
+        .main-content {
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        /* 页脚 */
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #888;
+            font-size: 12px;
+            border-top: 1px solid #333;
+            margin-top: 40px;
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="navbar-brand">🎵 Kat Records</a>
+        <ul class="navbar-nav">
+            <li><a href="/" class="{% if request.url.path == '/' %}active{% endif %}">📊 仪表板</a></li>
+            <li><a href="/episodes" class="{% if request.url.path == '/episodes' %}active{% endif %}">📋 期数管理</a></li>
+            <li><a href="/library" class="{% if request.url.path == '/library' %}active{% endif %}">🎵 资源库</a></li>
+            <li><a href="/analytics" class="{% if request.url.path == '/analytics' %}active{% endif %}">📈 数据分析</a></li>
+            <li><a href="/settings" class="{% if request.url.path == '/settings' %}active{% endif %}">⚙️ 设置</a></li>
+        </ul>
+    </nav>
+    
+    <div class="main-content">
+        {% block content %}{% endblock %}
+    </div>
+    
+    <footer class="footer">
+        Kat Records Dashboard © 2025 | 最后更新: <span id="footer-time"></span>
+    </footer>
+    
+    <script>
+        // 更新页脚时间
+        document.getElementById('footer-time').textContent = new Date().toLocaleTimeString();
+        
+        // 高亮当前页面的导航链接
+        document.querySelectorAll('.navbar-nav a').forEach(link => {
+            if (link.getAttribute('href') === window.location.pathname) {
+                link.classList.add('active');
+            }
+        });
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
+

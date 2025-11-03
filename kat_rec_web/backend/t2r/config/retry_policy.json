@@ -1,0 +1,35 @@
+{
+  "retry_policy": {
+    "default_retries": 1,
+    "max_retries": 5,
+    "backoff_multiplier": 2,
+    "backoff_base_seconds": 1,
+    "stages": {
+      "planning": {
+        "retries": 0,
+        "backoff_seconds": 1
+      },
+      "remix": {
+        "retries": 2,
+        "backoff_seconds": 5
+      },
+      "render": {
+        "retries": 2,
+        "backoff_seconds": 10
+      },
+      "upload": {
+        "retries": 3,
+        "backoff_seconds": 15
+      },
+      "verify": {
+        "retries": 2,
+        "backoff_seconds": 5
+      },
+      "completed": {
+        "retries": 0,
+        "backoff_seconds": 0
+      }
+    }
+  }
+}
+

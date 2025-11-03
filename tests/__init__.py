@@ -1,3 +1,3 @@
 """
-Test suite package for Vibe Coding Infra.
+Test suite package for Kat Records Studio.
 """
