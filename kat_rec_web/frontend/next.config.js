@@ -1,8 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Enable standalone output for smaller Docker images
-  output: 'standalone',
+  // Static export for desktop app (can be overridden for server builds)
+  output: process.env.NEXT_OUTPUT_MODE === 'standalone' ? 'standalone' : 'export',
+  trailingSlash: true,
   // Optimize bundle size
   experimental: {
     optimizePackageImports: ['lucide-react', '@tanstack/react-query'],

@@ -3,7 +3,9 @@
  * 
  * Client-side API calls for T2R (Trip to Reality) endpoints.
  */
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+import { getApiBase } from '../lib/apiBase'
+
+const API_URL = getApiBase()
 
 async function apiRequest<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${endpoint}`, {
