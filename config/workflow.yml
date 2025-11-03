@@ -1,0 +1,199 @@
+# Kat Records × Vibe Coding - 工作流配置
+
+# 工作流阶段定义
+stages:
+  - id: "01_track_selection"
+    name: "Track Selection"
+    description: "提取歌曲，生成歌单，分组为LP"
+    script: "scripts/local_picker/create_mixtape.py"
+    inputs: []
+    outputs:
+      - pattern: "*_playlist.csv"
+        required: true
+        description: "歌单CSV文件"
+    depends_on: []
+    color: "cyan"
+    
+  - id: "02_scheduling"
+    name: "Scheduling"
+    description: "分配LP到发布日期"
+    script: "scripts/local_picker/create_schedule_with_confirmation.py"
+    inputs:
+      - pattern: "*_playlist.csv"
+    outputs:
+      - pattern: "config/schedule_master.json"
+        required: true
+        description: "排播表JSON文件"
+    depends_on: ["01_track_selection"]
+    color: "blue"
+    
+  - id: "03_image_extraction"
+    name: "Image Extraction"
+    description: "选择图片集，自动提取基础色板"
+    script: "scripts/local_picker/create_mixtape.py"
+    inputs:
+      - pattern: "config/schedule_master.json"
+    outputs:
+      - pattern: "*_cover.png"
+        required: true
+        description: "封面PNG文件"
+      - pattern: "*basecolor.yaml"
+        required: false
+        description: "基础色板YAML文件"
+    depends_on: ["02_scheduling"]
+    color: "magenta"
+    
+  - id: "04_title_generation"
+    name: "Title Generation"
+    description: "基于歌单+颜色创建LP标题和风格"
+    script: "scripts/local_picker/create_mixtape.py"
+    inputs:
+      - pattern: "*_playlist.csv"
+      - pattern: "*_cover.png"
+    outputs:
+      - pattern: "*_playlist.csv"
+        required: true
+        description: "包含标题的歌单文件"
+    depends_on: ["03_image_extraction"]
+    color: "yellow"
+    
+  - id: "05_youtube_title"
+    name: "YouTube Title Creation"
+    description: "将标题扩展为SEO优化的YouTube标题"
+    script: "scripts/local_picker/generate_youtube_assets.py"
+    inputs:
+      - pattern: "*_playlist.csv"
+    outputs:
+      - pattern: "*_youtube_title.txt"
+        required: true
+        description: "YouTube标题文件"
+    depends_on: ["04_title_generation"]
+    color: "green"
+    
+  - id: "06_description_generation"
+    name: "Description Generation"
+    description: "从歌单+标题生成完整YouTube描述"
+    script: "scripts/local_picker/generate_youtube_assets.py"
+    inputs:
+      - pattern: "*_playlist.csv"
+      - pattern: "*_youtube_title.txt"
+    outputs:
+      - pattern: "*_youtube_description.txt"
+        required: true
+        description: "YouTube描述文件"
+      - pattern: "*_youtube.srt"
+        required: true
+        description: "SRT字幕文件"
+    depends_on: ["05_youtube_title"]
+    color: "green"
+    
+  - id: "07_cover_rendering"
+    name: "Cover Rendering"
+    description: "使用图片+色板+元数据生成4K封面"
+    script: "scripts/local_picker/create_mixtape.py"
+    inputs:
+      - pattern: "*_playlist.csv"
+      - pattern: "*_cover.png"
+    outputs:
+      - pattern: "*_cover.png"
+        required: true
+        description: "4K封面PNG文件"
+    depends_on: ["04_title_generation", "03_image_extraction"]
+    color: "red"
+    
+  - id: "08_audio_mixing"
+    name: "Audio Mixing"
+    description: "自动混音选定曲目为最终LP音频"
+    script: "scripts/local_picker/remix_mixtape.py"
+    inputs:
+      - pattern: "*_playlist.csv"
+    outputs:
+      - pattern: "*_full_mix.mp3"
+        required: true
+        description: "完整混音MP3文件"
+    depends_on: ["01_track_selection"]
+    color: "cyan"
+    
+  - id: "09_video_rendering"
+    name: "Video Rendering"
+    description: "合并封面+混音为4K视频导出"
+    script: "scripts/local_picker/create_mixtape.py"
+    inputs:
+      - pattern: "*_cover.png"
+      - pattern: "*_full_mix.mp3"
+    outputs:
+      - pattern: "*_youtube.mp4"
+        required: true
+        description: "4K视频MP4文件"
+    depends_on: ["07_cover_rendering", "08_audio_mixing"]
+    color: "bright_red"
+    
+  - id: "10_youtube_upload"
+    name: "YouTube Upload"
+    description: "Upload video to YouTube and update schedule_master.json"
+    script: "scripts/uploader/upload_to_youtube.py"
+    inputs:
+      - pattern: "*_youtube.mp4"
+      - pattern: "*_youtube_title.txt"
+      - pattern: "*_youtube_description.txt"
+    outputs:
+      - pattern: "*_youtube_upload.json"
+        required: true
+        description: "YouTube upload result JSON"
+    depends_on: ["09_video_rendering"]
+    color: "bright_green"
+
+# 状态定义
+statuses:
+  pending:
+    icon: "[ ]"
+    color: "dim white"
+    description: "待处理"
+  in_progress:
+    icon: "[🟡]"
+    color: "yellow"
+    description: "进行中"
+  completed:
+    icon: "[✓]"
+    color: "green"
+    description: "已完成"
+  error:
+    icon: "[✗]"
+    color: "red"
+    description: "错误"
+  skipped:
+    icon: "[⊘]"
+    color: "dim"
+    description: "已跳过"
+
+# 快捷键定义
+keybindings:
+  navigation:
+    up: ["↑", "w", "k"]
+    down: ["↓", "s", "j"]
+    left: ["←", "h"]
+    right: ["→", "l"]
+    select: ["enter", "e"]
+    back: ["esc", "q"]
+    
+  actions:
+    toggle_complete: ["space", " "]
+    run_stage: ["r", "R"]
+    run_all: ["a", "A"]
+    sync_status: ["s", "S"]
+    command_palette: [":", "/"]
+    help: ["h", "?"]
+    
+  detail_panel:
+    run_script: "1"
+    mark_complete: "2"
+    reset_status: "3"
+    approve_next: "4"
+
+# 自动同步设置
+auto_sync:
+  enabled: true
+  interval_seconds: 5
+  watch_file_changes: true
+  sync_on_refresh: true
+

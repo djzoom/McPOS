@@ -1,0 +1,120 @@
+
+> kat-rec-web-frontend@1.0.0 build /Users/z/Downloads/Kat_Rec/kat_rec_web/frontend
+> next build
+
+   ▲ Next.js 15.5.6
+   - Environments: .env.local
+   - Experiments (use with caution):
+     · optimizePackageImports
+
+   Creating an optimized production build ...
+ ⚠ Compiled with warnings in 3.2s
+
+./components/t2r/ChannelOverview.tsx
+Attempted import error: 'useT2RAssetsStore' is not exported from '@/stores/t2rScheduleStore' (imported as 'useT2RAssetsStore').
+
+Import trace for requested module:
+./components/t2r/ChannelOverview.tsx
+./app/(t2r)/t2r/page.tsx
+
+ ⚠ Compiled with warnings in 3.2s
+
+./components/t2r/ChannelOverview.tsx
+Attempted import error: 'useT2RAssetsStore' is not exported from '@/stores/t2rScheduleStore' (imported as 'useT2RAssetsStore').
+
+Import trace for requested module:
+./components/t2r/ChannelOverview.tsx
+./app/(t2r)/t2r/page.tsx
+
+ ✓ Compiled successfully in 6.5s
+   Linting and checking validity of types ...
+
+Failed to compile.
+
+./app/(t2r)/t2r/page.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./app/layout.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./app/page.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./app/providers.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./components/ChannelCard.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./components/ChannelWorkbench/ChannelCard.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./components/ChannelWorkbench/ViewControls.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./components/ChannelWorkbench/index.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./components/ChannelWorkbench/types.ts
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./components/LibraryTabs.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+16:6  Warning: React Hook useEffect has a missing dependency: 'loadLibrary'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+
+./components/MissionControl/HealthMetrics.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./components/MissionControl/QueueStatus.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./components/MissionControl/SystemMetricsCard.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./components/MissionControl/TrendChart.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./components/MissionControl/index.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./components/MissionControl/types.ts
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./components/SystemFeed.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./components/UploadStatus.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./components/t2r/AssetHealth.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./components/t2r/AuditTrail.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./components/t2r/ChannelOverview.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./components/t2r/DescriptionLinter.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./components/t2r/PlanAndRun.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./components/t2r/PostUploadVerify.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./components/t2r/SRTDoctor.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./components/t2r/ScheduleDoctor.tsx
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./src/stores/_shapeCheck.ts
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+./src/types/events.ts
+1:1  Error: Definition for rule '@typescript-eslint/no-unused-vars' was not found.  @typescript-eslint/no-unused-vars
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/app/api-reference/config/eslint#disabling-rules
+ ELIFECYCLE  Command failed with exit code 1.

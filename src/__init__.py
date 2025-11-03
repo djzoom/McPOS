@@ -1,3 +1,3 @@
 """
-Bootstrap module for the Vibe Coding Infra source package.
+Source package for Kat Records Studio.
 """

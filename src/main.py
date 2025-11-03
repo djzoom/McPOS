@@ -1,15 +1,15 @@
 """
-Entry point for the Vibe Coding Infra template.
+Entry point for Kat Records Studio.
 """
 
 from pathlib import Path
 
 
 def main() -> None:
-    """Bootstrap the template application."""
+    """Bootstrap Kat Records Studio application."""
     project_root = Path(__file__).resolve().parents[1]
     project_name = project_root.name
-    print(f"Welcome to {project_name} — powered by Vibe Coding Infra!")
+    print(f"Welcome to Kat Records Studio — {project_name}!")
 
 
 if __name__ == "__main__":

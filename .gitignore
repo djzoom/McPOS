@@ -8,6 +8,7 @@ __pycache__/
 .venv/
 env/
 venv/
+路径按实际安装位置调整/
 
 # Editors
 .vscode/
@@ -15,6 +16,9 @@ venv/
 
 # OS
 .DS_Store
+.next/
+.pnpm-store/
+pnpm-lock.yaml
 
 # Node
 node_modules/
@@ -24,3 +28,64 @@ package-lock.json
 # Build
 dist/
 build/
+
+# Project assets
+data/song_files/
+data/song_library.csv
+data/song_usage.csv
+output/
+
+# YouTube OAuth credentials (sensitive)
+config/google/client_secrets.json
+config/google/youtube_token.json
+config/google/*.json
+config/production_log.json
+config/schedule_master.json
+
+# Generated schedule files
+output/schedule_*.md
+output/*.csv
+output/run.json
+
+# Secrets and local env
+.env
+.env.*
+.envrc
+.envrc.*
+*.local
+*.secrets
+secrets.*
+*.key
+*.pem
+*.p8
+*.p12
+*.cert
+
+# API Keys (安全：绝不提交)
+config/openai_api_key.txt
+config/gemini_api_key.txt
+config/*_api_key.txt
+config/*_secret.txt
+config/api_config.json
+**/openai_api_key.txt
+**/gemini_api_key.txt
+**/*_api_key.txt
+
+# Shell history/temporary
+.bash_history
+.zsh_history
+.python_history
+
+# Temporary and cache
+*.tmp
+*.bak
+*.swp
+*~
+.cursor/plans/
+
+# Package files (should be regenerated, not committed)
+*.tar.gz
+*.zip
+
+# Icon generation temporary files
+*.iconset
