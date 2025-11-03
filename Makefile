@@ -1,10 +1,15 @@
-.PHONY: help install test clean monitor dashboard metrics-api
+.PHONY: help install test clean monitor dashboard metrics-api app:dev app:build app:verify
 
 help:
 	@echo "Kat Records Studio - 可用命令"
 	@echo ""
 	@echo "安装和配置:"
 	@echo "  make install         安装依赖"
+	@echo ""
+	@echo "桌面应用:"
+	@echo "  make app:dev          开发模式运行桌面应用"
+	@echo "  make app:build        构建桌面应用"
+	@echo "  make app:verify       验证桌面应用配置"
 	@echo ""
 	@echo "监控和仪表板:"
 	@echo "  make monitor         启动CLI监控（持续模式）"
@@ -26,6 +31,15 @@ dashboard:
 
 metrics-api:
 	uvicorn src.api.metrics_api:app --reload --port 8000
+
+app:dev:
+	pnpm -C desktop/tauri tauri dev
+
+app:build:
+	pnpm -C kat_rec_web/frontend export && pnpm -C desktop/tauri tauri build
+
+app:verify:
+	bash scripts/verify_app.sh
 
 test:
 	pytest tests/ -v
