@@ -127,10 +127,11 @@ app.include_router(control.router, tags=["control"])
 # Internal codename: T2R (preserved for backward compatibility)
 # Public name: MCRB (Mission Control Reality Board)
 try:
-    from t2r.routes import scan, srt, plan, upload, audit, metrics
+    from t2r.routes import scan, srt, plan, upload, audit, metrics, desc
     # Original prefix: /api/t2r/* (stable, no breaking changes)
     app.include_router(scan.router, prefix="/api/t2r", tags=["t2r"])
     app.include_router(srt.router, prefix="/api/t2r", tags=["t2r"])
+    app.include_router(desc.router, prefix="/api/t2r", tags=["t2r"])
     app.include_router(plan.router, prefix="/api/t2r", tags=["t2r"])
     app.include_router(upload.router, prefix="/api/t2r", tags=["t2r"])
     app.include_router(audit.router, prefix="/api/t2r", tags=["t2r"])
@@ -140,6 +141,7 @@ try:
     # Public alias: /api/mcrb/* (no duplication, same router instances)
     app.include_router(scan.router, prefix="/api/mcrb", tags=["mcrb"])
     app.include_router(srt.router, prefix="/api/mcrb", tags=["mcrb"])
+    app.include_router(desc.router, prefix="/api/mcrb", tags=["mcrb"])
     app.include_router(plan.router, prefix="/api/mcrb", tags=["mcrb"])
     app.include_router(upload.router, prefix="/api/mcrb", tags=["mcrb"])
     app.include_router(audit.router, prefix="/api/mcrb", tags=["mcrb"])

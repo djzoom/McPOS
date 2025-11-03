@@ -2,7 +2,9 @@
 const nextConfig = {
   reactStrictMode: true,
   // Static export for desktop app (can be overridden for server builds)
-  output: process.env.NEXT_OUTPUT_MODE === 'standalone' ? 'standalone' : 'export',
+  // In dev mode, output is not set (allows middleware to work)
+  output: process.env.NEXT_OUTPUT_MODE === 'standalone' ? 'standalone' : 
+          process.env.NEXT_OUTPUT_MODE === 'export' ? 'export' : undefined,
   trailingSlash: true,
   // Optimize bundle size
   experimental: {

@@ -3,7 +3,8 @@
 import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { scanSchedule } from '@/services/t2rApi'
-import { useT2RScheduleStore, useT2RAssetsStore } from '@/stores/t2rScheduleStore'
+import { useT2RScheduleStore } from '@/stores/t2rScheduleStore'
+import { useT2RAssetsStore } from '@/stores/t2rAssetsStore'
 import { motion } from 'framer-motion'
 import { Lock, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react'
 
@@ -19,8 +20,12 @@ export function ChannelOverview() {
 
   useEffect(() => {
     if (data?.status === 'ok') {
-      setLockedCount(data.data.locked_count)
-      setConflicts(data.data.conflicts || [])
+      setLockedCount(data.summary?.locked_count || data.data?.locked_count || 0)
+      setConflicts(data.summary?.conflicts || data.data?.conflicts || [])
+      // Update asset usage from scan result
+      if (data.summary?.asset_usage) {
+        useT2RAssetsStore.getState().setAssetUsage(data.summary.asset_usage)
+      }
     }
   }, [data, setLockedCount, setConflicts])
 
