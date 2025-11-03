@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::time::Duration;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, LazyLock};
 use tauri::{AppHandle, Manager, Window};
 use serde_json::Value;
 
@@ -12,7 +12,7 @@ const PORT_RANGE: (u16, u16) = (8000, 8010);
 const DEFAULT_PORT: u16 = 8010;
 
 // Global backend process handle
-static BACKEND_PROCESS: Arc<Mutex<Option<std::process::Child>>> = Arc::new(Mutex::new(None));
+static BACKEND_PROCESS: LazyLock<Arc<Mutex<Option<std::process::Child>>>> = LazyLock::new(|| Arc::new(Mutex::new(None)));
 
 #[tauri::command]
 fn get_api_port() -> u16 {
@@ -185,7 +185,9 @@ async fn start_backend(app: AppHandle) -> Result<String, String> {
                 }
 
                 if ready {
-                    app.emit("backend-ready", &port_str).unwrap();
+                    if let Some(window) = app.get_window("main") {
+                        let _ = window.emit("backend-ready", &port_str);
+                    }
                     return Ok(port_str);
                 } else {
                     // Kill process
@@ -276,10 +278,8 @@ fn main() {
                             eprintln!("Failed to inject API base: {}", e);
                         }
                         
-                        // Navigate to /t2r
-                        if let Err(e) = window_clone.navigate(tauri::WindowUrl::App("/t2r/".into())) {
-                            eprintln!("Failed to navigate: {}", e);
-                        }
+                        // Navigate to /t2r using eval
+                        let _ = window_clone.eval(r#"window.location.href = '/t2r/';"#);
                     }
                     Err(e) => {
                         eprintln!("Failed to start backend: {}", e);

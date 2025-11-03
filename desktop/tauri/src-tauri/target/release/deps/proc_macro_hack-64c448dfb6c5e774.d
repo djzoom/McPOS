@@ -1,0 +1,9 @@
+/Users/z/Downloads/Kat_Rec/desktop/tauri/src-tauri/target/release/deps/proc_macro_hack-64c448dfb6c5e774.d: /Users/z/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/proc-macro-hack-0.5.20+deprecated/src/lib.rs /Users/z/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/proc-macro-hack-0.5.20+deprecated/src/quote.rs /Users/z/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/proc-macro-hack-0.5.20+deprecated/src/error.rs /Users/z/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/proc-macro-hack-0.5.20+deprecated/src/iter.rs /Users/z/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/proc-macro-hack-0.5.20+deprecated/src/parse.rs
+
+/Users/z/Downloads/Kat_Rec/desktop/tauri/src-tauri/target/release/deps/libproc_macro_hack-64c448dfb6c5e774.dylib: /Users/z/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/proc-macro-hack-0.5.20+deprecated/src/lib.rs /Users/z/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/proc-macro-hack-0.5.20+deprecated/src/quote.rs /Users/z/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/proc-macro-hack-0.5.20+deprecated/src/error.rs /Users/z/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/proc-macro-hack-0.5.20+deprecated/src/iter.rs /Users/z/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/proc-macro-hack-0.5.20+deprecated/src/parse.rs
+
+/Users/z/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/proc-macro-hack-0.5.20+deprecated/src/lib.rs:
+/Users/z/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/proc-macro-hack-0.5.20+deprecated/src/quote.rs:
+/Users/z/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/proc-macro-hack-0.5.20+deprecated/src/error.rs:
+/Users/z/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/proc-macro-hack-0.5.20+deprecated/src/iter.rs:
+/Users/z/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/proc-macro-hack-0.5.20+deprecated/src/parse.rs:
