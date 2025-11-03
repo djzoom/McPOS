@@ -7,8 +7,9 @@ import { useEffect, useRef } from 'react'
 import { WSClient, type WSMessage } from '@/services/wsClient'
 import { useChannelStore } from '@/stores/channelSlice'
 import { useFeedStore } from '@/stores/feedSlice'
+import { getWsBase } from '@/lib/apiBase'
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000'
+const WS_URL = getWsBase()
 
 export function useWebSocket() {
   const statusClientRef = useRef<WSClient | null>(null)

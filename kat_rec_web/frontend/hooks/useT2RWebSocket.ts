@@ -9,8 +9,9 @@ import { useT2RScheduleStore } from '@/stores/t2rScheduleStore'
 import { useT2RAssetsStore } from '@/stores/t2rAssetsStore'
 import { useT2RSrtStore } from '@/stores/t2rSrtStore'
 import { useRunbookStore } from '@/stores/runbookStore'
+import { getWsBase } from '@/lib/apiBase'
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000'
+const WS_URL = getWsBase()
 
 export function useT2RWebSocket() {
   const statusClientRef = useRef<WSClient | null>(null)
