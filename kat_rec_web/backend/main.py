@@ -124,15 +124,27 @@ app.include_router(websocket.router, tags=["websocket"])
 app.include_router(control.router, tags=["control"])
 
 # --- T2R Routers (scan/srt/plan/upload/audit/metrics) ---
+# Internal codename: T2R (preserved for backward compatibility)
+# Public name: MCRB (Mission Control Reality Board)
 try:
     from t2r.routes import scan, srt, plan, upload, audit, metrics
-    app.include_router(scan.router, prefix="/api")
-    app.include_router(srt.router, prefix="/api")
-    app.include_router(plan.router, prefix="/api")
-    app.include_router(upload.router, prefix="/api")
-    app.include_router(audit.router, prefix="/api")
-    app.include_router(metrics.router, prefix="/api")
-    print("✅ T2R routers registered")
+    # Original prefix: /api/t2r/* (stable, no breaking changes)
+    app.include_router(scan.router, prefix="/api/t2r", tags=["t2r"])
+    app.include_router(srt.router, prefix="/api/t2r", tags=["t2r"])
+    app.include_router(plan.router, prefix="/api/t2r", tags=["t2r"])
+    app.include_router(upload.router, prefix="/api/t2r", tags=["t2r"])
+    app.include_router(audit.router, prefix="/api/t2r", tags=["t2r"])
+    # Metrics router: register both at root /metrics/* and /api/t2r/metrics/*
+    app.include_router(metrics.router, prefix="", tags=["metrics"])
+    app.include_router(metrics.router, prefix="/api/t2r", tags=["t2r"])
+    # Public alias: /api/mcrb/* (no duplication, same router instances)
+    app.include_router(scan.router, prefix="/api/mcrb", tags=["mcrb"])
+    app.include_router(srt.router, prefix="/api/mcrb", tags=["mcrb"])
+    app.include_router(plan.router, prefix="/api/mcrb", tags=["mcrb"])
+    app.include_router(upload.router, prefix="/api/mcrb", tags=["mcrb"])
+    app.include_router(audit.router, prefix="/api/mcrb", tags=["mcrb"])
+    app.include_router(metrics.router, prefix="/api/mcrb", tags=["mcrb"])
+    print("✅ T2R/MCRB routers registered (dual prefix support)")
 except Exception as e:
     print(f"⚠️  T2R routers not available: {e}")
 

@@ -45,7 +45,7 @@ class SRTFixRequest(BaseModel):
     dry_run: bool = True
 
 
-@router.post("/api/t2r/srt/inspect")
+@router.post("/srt/inspect")
 async def inspect_srt_endpoint(request: SRTInspectRequest) -> Dict:
     """
     Inspect SRT file for issues.
@@ -120,7 +120,7 @@ async def inspect_srt_endpoint(request: SRTInspectRequest) -> Dict:
     }
 
 
-@router.post("/api/t2r/srt/fix")
+@router.post("/srt/fix")
 async def fix_srt_endpoint(request: SRTFixRequest) -> Dict:
     """
     Fix SRT file issues using specified strategy.

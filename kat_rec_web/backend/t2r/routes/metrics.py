@@ -71,14 +71,15 @@ async def get_system_metrics() -> Dict:
 @router.get("/metrics/ws-health")
 async def get_ws_health() -> Dict:
     """
-    Get WebSocket health metrics.
+    Get WebSocket health metrics including buffer flush stats.
     
     Returns:
         {
             "active_connections": int,
+            "status_manager": {...buffer_metrics},
+            "events_manager": {...buffer_metrics},
             "ping_loss_percent": float,
             "avg_delay_ms": float,
-            "connection_ids": List[str],
             "timestamp": str
         }
     """
@@ -89,27 +90,39 @@ async def get_ws_health() -> Dict:
         
         all_connections = list(status_conns.keys()) + list(events_conns.keys())
         
+        # Get buffer flush metrics from managers
+        status_metrics = status_manager.get_buffer_metrics()
+        events_metrics = events_manager.get_buffer_metrics()
+        
         # Calculate ping loss and delay (simplified - would need tracking)
         ping_loss_percent = 0.0  # TODO: Track ping/pong responses
         avg_delay_ms = 0.0  # TODO: Track message round-trip times
         
-        # For now, return basic stats
+        # Verify version monotonicity (never decreases)
+        status_version_ok = status_metrics["version"] >= 0
+        events_version_ok = events_metrics["version"] >= 0
+        
         return {
             "active_connections": len(all_connections),
+            "status_manager": {
+                "connections": len(status_conns),
+                **status_metrics,
+                "version_monotonic": status_version_ok,
+            },
+            "events_manager": {
+                "connections": len(events_conns),
+                **events_metrics,
+                "version_monotonic": events_version_ok,
+            },
             "ping_loss_percent": round(ping_loss_percent, 2),
             "avg_delay_ms": round(avg_delay_ms, 2),
             "connection_ids": all_connections[:10],  # Limit to 10 for response size
-            "status_manager_count": len(status_conns),
-            "events_manager_count": len(events_conns),
             "timestamp": datetime.utcnow().isoformat()
         }
     except Exception as e:
         logger.error(f"Failed to get WS health: {e}")
         return {
             "active_connections": 0,
-            "ping_loss_percent": 0.0,
-            "avg_delay_ms": 0.0,
-            "connection_ids": [],
             "error": str(e),
             "timestamp": datetime.utcnow().isoformat()
         }

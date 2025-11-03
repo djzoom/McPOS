@@ -15,7 +15,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-@router.post("/api/t2r/scan")
+@router.post("/scan")
 async def scan_schedule() -> Dict:
     """
     Scan schedule and output directory, lock published episodes.

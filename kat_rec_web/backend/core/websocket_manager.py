@@ -63,6 +63,9 @@ class ConnectionManager:
         self._buffer_flush_interval = 0.1  # 100ms
         self._buffer_task: Optional[asyncio.Task] = None
         self._version = 0
+        self._last_flush_time = 0.0
+        self._flush_count = 0
+        self._buffer_size_peak = 0
 
     async def connect(self, websocket: WebSocket) -> str:
         """Accept connection and track it"""
@@ -148,11 +151,16 @@ class ConnectionManager:
     
     async def _flush_loop(self, interval: float = 0.1):
         """Internal flush loop for buffered messages"""
+        import time
         while True:
             if self._message_buffer and self.connections:
                 batch = []
+                buffer_size = 0
                 async with self._buffer_lock:
                     batch, self._message_buffer = self._message_buffer, []
+                    buffer_size = len(batch)
+                    if buffer_size > self._buffer_size_peak:
+                        self._buffer_size_peak = buffer_size
                 
                 disconnected = []
                 for connection_id, conn_info in list(self.connections.items()):
@@ -166,6 +174,10 @@ class ConnectionManager:
                 # Remove disconnected connections
                 for conn_id in disconnected:
                     self.disconnect(conn_id)
+                
+                # Track flush metrics
+                self._flush_count += 1
+                self._last_flush_time = time.time()
             await asyncio.sleep(interval)
     
     async def start_buffer_flush(self):
@@ -189,7 +201,7 @@ class ConnectionManager:
             message: Message to broadcast
             immediate: If True, send immediately; otherwise add to buffer
         """
-        # Increment version for each broadcast
+        # Increment version for each broadcast (monotonic, never decreases)
         self._version += 1
         message["version"] = self._version
         
@@ -300,6 +312,29 @@ class ConnectionManager:
     def get_active_count(self) -> int:
         """Get number of active connections"""
         return len(self.connections)
+    
+    def get_buffer_metrics(self) -> Dict:
+        """Get buffer flush metrics"""
+        async def _get_metrics():
+            async with self._buffer_lock:
+                buffer_size = len(self._message_buffer)
+            return {
+                "current_buffer_size": buffer_size,
+                "peak_buffer_size": self._buffer_size_peak,
+                "flush_count": self._flush_count,
+                "last_flush_time": self._last_flush_time,
+                "flush_interval_ms": self._buffer_flush_interval * 1000,
+                "version": self._version,
+            }
+        # Return sync version (for metrics endpoint)
+        return {
+            "current_buffer_size": len(self._message_buffer),
+            "peak_buffer_size": self._buffer_size_peak,
+            "flush_count": self._flush_count,
+            "last_flush_time": self._last_flush_time,
+            "flush_interval_ms": self._buffer_flush_interval * 1000,
+            "version": self._version,
+        }
 
     async def shutdown(self):
         """Shutdown manager and cancel tasks"""
