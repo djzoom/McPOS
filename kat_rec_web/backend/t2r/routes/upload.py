@@ -25,7 +25,7 @@ class UploadVerifyRequest(BaseModel):
     platform: str = "youtube"
 
 
-@router.post("/api/upload/start")
+@router.post("/upload/start")
 async def start_upload(request: UploadStartRequest) -> Dict:
     """
     Start upload process.
@@ -51,7 +51,7 @@ async def start_upload(request: UploadStartRequest) -> Dict:
     }
 
 
-@router.get("/api/upload/status")
+@router.get("/upload/status")
 async def get_upload_status(upload_id: str) -> Dict:
     """
     Get upload status.
@@ -72,7 +72,7 @@ async def get_upload_status(upload_id: str) -> Dict:
     }
 
 
-@router.post("/api/upload/verify")
+@router.post("/upload/verify")
 async def verify_upload(request: UploadVerifyRequest) -> Dict:
     """
     Verify uploaded video.

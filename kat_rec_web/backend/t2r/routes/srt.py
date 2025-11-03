@@ -15,7 +15,7 @@ from ..services.srt_service import (
     parse_srt_file, inspect_srt, fix_srt_overlaps,
     format_srt_diff, save_srt_file
 )
-from ...routes.websocket import broadcast_t2r_event
+from routes.websocket import broadcast_t2r_event
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

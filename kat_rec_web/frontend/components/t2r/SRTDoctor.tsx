@@ -3,10 +3,15 @@
 import { useState } from 'react'
 import { Upload, Check, FileText } from 'lucide-react'
 import { useT2RSrtStore } from '@/stores/t2rSrtStore'
+import { useT2RAssetsStore } from '@/stores/t2rAssetsStore'
+import { inspectSRT, fixSRT, scanSchedule } from '@/services/t2rApi'
 
 export function SRTDoctor() {
   const { issues, fixResult, setIssues, setFixResult } = useT2RSrtStore()
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [episodeId, setEpisodeId] = useState('')
+  const [filePath, setFilePath] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
 
   return (
     <div className="space-y-6">
@@ -39,13 +44,78 @@ export function SRTDoctor() {
           </div>
         </div>
 
+        {/* Episode ID or File Path Input */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium mb-2">期数 ID 或文件路径</label>
+          <input
+            type="text"
+            value={episodeId || filePath}
+            onChange={(e) => {
+              if (e.target.value.includes('/')) {
+                setFilePath(e.target.value)
+                setEpisodeId('')
+              } else {
+                setEpisodeId(e.target.value)
+                setFilePath('')
+              }
+            }}
+            placeholder="期数ID（如: 20251102）或文件路径"
+            className="w-full px-3 py-2 bg-dark-bg-secondary border border-dark-border rounded text-dark-text-primary"
+          />
+        </div>
+
         {/* Actions */}
         <div className="flex gap-2 mb-4">
-          <button className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors">
+          <button
+            onClick={async () => {
+              if (!episodeId && !filePath && !selectedFile) return
+              setIsLoading(true)
+              try {
+                const result = await inspectSRT({
+                  episode_id: episodeId || undefined,
+                  file_path: filePath || undefined,
+                })
+                setIssues(result.issues || [])
+                // Refresh KPIs if successful
+                if (result.status === 'ok') {
+                  // Trigger scan refresh to update asset usage
+                  const scanResult = await scanSchedule()
+                  if (scanResult?.summary?.asset_usage) {
+                    useT2RAssetsStore.getState().setAssetUsage(scanResult.summary.asset_usage)
+                  }
+                }
+              } catch (error) {
+                console.error('SRT检查失败:', error)
+                setIssues([{ type: 'error', message: String(error) }])
+              } finally {
+                setIsLoading(false)
+              }
+            }}
+            disabled={isLoading || (!episodeId && !filePath && !selectedFile)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 transition-colors"
+          >
             <Check className="w-4 h-4" />
-            检查
+            {isLoading ? '检查中...' : '检查'}
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors">
+          <button
+            onClick={async () => {
+              if (!episodeId) return
+              setIsLoading(true)
+              try {
+                const result = await fixSRT({
+                  episode_id: episodeId,
+                  strategy: 'clip',
+                })
+                setFixResult(result)
+              } catch (error) {
+                console.error('SRT修复失败:', error)
+              } finally {
+                setIsLoading(false)
+              }
+            }}
+            disabled={isLoading || !episodeId}
+            className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 transition-colors"
+          >
             <FileText className="w-4 h-4" />
             修复
           </button>

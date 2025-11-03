@@ -9,6 +9,7 @@ import { DescriptionLinter } from '@/components/t2r/DescriptionLinter'
 import { PlanAndRun } from '@/components/t2r/PlanAndRun'
 import { PostUploadVerify } from '@/components/t2r/PostUploadVerify'
 import { AuditTrail } from '@/components/t2r/AuditTrail'
+import { useT2RWebSocket } from '@/hooks/useT2RWebSocket'
 
 type TabId = 
   | 'overview'

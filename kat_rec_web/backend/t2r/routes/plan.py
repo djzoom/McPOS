@@ -14,7 +14,7 @@ import hashlib
 import asyncio
 from pathlib import Path
 
-from ...routes.websocket import broadcast_t2r_event
+from routes.websocket import broadcast_t2r_event
 from ..services.schedule_service import load_schedule_master
 from ..services.runbook_journal import add_run_entry, get_run_status, resume_from_run_id
 from ..services.retry_manager import load_retry_policy, execute_with_retry
@@ -50,7 +50,7 @@ class RunRequest(BaseModel):
     dry_run: bool = False
 
 
-@router.post("/api/episodes/plan")
+@router.post("/plan")
 async def plan_episode(request: PlanRequest) -> Dict:
     """
     Generate episode recipe with duplicate avoidance and SEO template.
@@ -332,7 +332,7 @@ async def execute_runbook_stages(
         )
 
 
-@router.post("/api/episodes/run")
+@router.post("/run")
 async def run_episode(request: RunRequest) -> Dict:
     """
     Execute runbook for episode creation.

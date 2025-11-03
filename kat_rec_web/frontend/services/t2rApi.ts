@@ -77,7 +77,7 @@ export interface PlanRequest {
 }
 
 export async function planEpisode(request: PlanRequest) {
-  return apiRequest('/api/episodes/plan', {
+  return apiRequest('/api/t2r/plan', {
     method: 'POST',
     body: JSON.stringify(request),
   })
@@ -91,7 +91,7 @@ export interface RunRequest {
 }
 
 export async function runEpisode(request: RunRequest) {
-  return apiRequest('/api/episodes/run', {
+  return apiRequest('/api/t2r/run', {
     method: 'POST',
     body: JSON.stringify(request),
   })
@@ -105,14 +105,14 @@ export interface UploadStartRequest {
 }
 
 export async function startUpload(request: UploadStartRequest) {
-  return apiRequest('/api/upload/start', {
+  return apiRequest('/api/t2r/upload/start', {
     method: 'POST',
     body: JSON.stringify(request),
   })
 }
 
 export async function getUploadStatus(uploadId: string) {
-  return apiRequest(`/api/upload/status?upload_id=${uploadId}`)
+  return apiRequest(`/api/t2r/upload/status?upload_id=${uploadId}`)
 }
 
 export interface UploadVerifyRequest {
@@ -122,7 +122,7 @@ export interface UploadVerifyRequest {
 }
 
 export async function verifyUpload(request: UploadVerifyRequest) {
-  return apiRequest('/api/upload/verify', {
+  return apiRequest('/api/t2r/upload/verify', {
     method: 'POST',
     body: JSON.stringify(request),
   })
