@@ -20,7 +20,7 @@ class DescLintRequest(BaseModel):
     auto_fix: bool = False
 
 
-@router.post("/api/t2r/desc/lint")
+@router.post("/desc/lint")
 async def lint_description(request: DescLintRequest) -> Dict:
     """
     Lint description for issues.

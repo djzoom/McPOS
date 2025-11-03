@@ -22,7 +22,7 @@ class AuditRequest(BaseModel):
     report_type: str = "daily"  # "daily", "weekly", "custom"
 
 
-@router.get("/api/t2r/audit")
+@router.get("/audit")
 async def get_audit(request: AuditRequest) -> Dict:
     """
     Generate audit report.
