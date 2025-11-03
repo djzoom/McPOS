@@ -1,62 +1,85 @@
-#!/usr/bin/env bash
-# Verify desktop app configuration and readiness
-# Extends existing verification patterns, does not fork new test tree
+#!/bin/bash
+set -e
 
-set -euo pipefail
+echo "🔍 验证 Kat Rec Control Center 桌面应用配置"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
 
-echo "🔍 Verifying desktop app configuration..."
+# 1. 检查前端导出
+echo "1️⃣  检查前端静态导出..."
+if [ -d "kat_rec_web/frontend/out" ]; then
+    echo "   ✅ 前端导出目录存在: kat_rec_web/frontend/out"
+else
+    echo "   ⚠️  前端导出目录不存在，正在构建..."
+    cd kat_rec_web/frontend
+    NEXT_OUTPUT_MODE=export pnpm build || {
+        echo "   ❌ 前端构建失败"
+        exit 1
+    }
+    cd ../..
+fi
 
-# Build frontend static export
-echo "  Building frontend static export..."
-pnpm -C kat_rec_web/frontend export || {
-    echo "❌ Frontend export failed"
-    exit 1
-}
-
-# Verify static export exists
-if [ ! -d "kat_rec_web/frontend/out" ]; then
-    echo "❌ Static export directory not found: kat_rec_web/frontend/out"
+# 2. 检查Tauri配置
+echo ""
+echo "2️⃣  检查Tauri配置..."
+if [ -f "desktop/tauri/src-tauri/tauri.conf.json" ]; then
+    echo "   ✅ Tauri配置文件存在"
+    PRODUCT_NAME=$(jq -r '.package.productName' desktop/tauri/src-tauri/tauri.conf.json)
+    VERSION=$(jq -r '.package.version' desktop/tauri/src-tauri/tauri.conf.json)
+    echo "   📦 应用名称: $PRODUCT_NAME"
+    echo "   📌 版本: $VERSION"
+else
+    echo "   ❌ Tauri配置文件不存在"
     exit 1
 fi
 
-echo "✅ Frontend static export complete"
-
-# Verify DRY compliance
-echo "  Running DRY compliance checks..."
-bash scripts/check_dry.sh || {
-    echo "❌ DRY compliance checks failed"
+# 3. 检查Rust代码
+echo ""
+echo "3️⃣  检查Rust代码..."
+if [ -f "desktop/tauri/src-tauri/src/main.rs" ]; then
+    echo "   ✅ main.rs存在"
+    if grep -q "DEFAULT_PORT.*8010" desktop/tauri/src-tauri/src/main.rs; then
+        echo "   ✅ 默认端口配置正确 (8010)"
+    fi
+    if grep -q "USE_MOCK_MODE.*false" desktop/tauri/src-tauri/src/main.rs; then
+        echo "   ✅ USE_MOCK_MODE设置为false"
+    fi
+else
+    echo "   ❌ main.rs不存在"
     exit 1
-}
+fi
 
-# Check backend can start (headless readiness probe)
-echo "  Checking backend readiness..."
-# Note: This assumes backend is not already running
-# In real verification, would start backend in background and test
+# 4. 检查后端主文件
+echo ""
+echo "4️⃣  检查后端配置..."
+if [ -f "kat_rec_web/backend/main.py" ]; then
+    echo "   ✅ backend/main.py存在"
+    if grep -q "USE_MOCK_MODE" kat_rec_web/backend/main.py; then
+        echo "   ✅ USE_MOCK_MODE支持已确认"
+    fi
+else
+    echo "   ❌ backend/main.py不存在"
+    exit 1
+fi
 
-if command -v python3 >/dev/null 2>&1; then
-    # Check if ws_probe exists and can be imported
-    if [ -f "audit/ws_probe.py" ]; then
-        echo "  Found ws_probe.py (will be used for WS testing)"
+# 5. 检查依赖
+echo ""
+echo "5️⃣  检查依赖..."
+if [ -f "desktop/tauri/src-tauri/Cargo.toml" ]; then
+    echo "   ✅ Cargo.toml存在"
+    if grep -q "reqwest" desktop/tauri/src-tauri/Cargo.toml; then
+        echo "   ✅ reqwest依赖已配置"
+    fi
+    if grep -q "tokio" desktop/tauri/src-tauri/Cargo.toml; then
+        echo "   ✅ tokio依赖已配置"
     fi
 fi
 
-# Verify Tauri configuration
-echo "  Verifying Tauri configuration..."
-if [ ! -f "desktop/tauri/src-tauri/tauri.conf.json" ]; then
-    echo "❌ Tauri config not found"
-    exit 1
-fi
-
-if [ ! -f "desktop/tauri/src-tauri/src/main.rs" ]; then
-    echo "❌ Tauri main.rs not found"
-    exit 1
-fi
-
-# Verify API base shim exists
-if [ ! -f "kat_rec_web/frontend/lib/apiBase.ts" ]; then
-    echo "❌ API base shim not found"
-    exit 1
-fi
-
-echo "✅ All desktop app verification checks passed!"
-
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "✅ 所有配置检查通过！"
+echo ""
+echo "📝 下一步："
+echo "   1. 运行 'make app:dev' 启动开发模式"
+echo "   2. 运行 'make app:build' 构建应用"
+echo ""

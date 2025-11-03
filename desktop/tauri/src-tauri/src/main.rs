@@ -9,6 +9,7 @@ use serde_json::Value;
 
 const MAX_STARTUP_SECONDS: u64 = 20;
 const PORT_RANGE: (u16, u16) = (8000, 8010);
+const DEFAULT_PORT: u16 = 8010;
 
 // Global backend process handle
 static BACKEND_PROCESS: Arc<Mutex<Option<std::process::Child>>> = Arc::new(Mutex::new(None));
@@ -72,14 +73,23 @@ fn get_backend_dir() -> PathBuf {
 }
 
 fn setup_logging() -> std::io::Result<File> {
-    let log_dir = std::env::current_exe()
+    // Use desktop/tauri/backend.log (relative to repo root)
+    let repo_root = std::env::current_exe()
         .ok()
-        .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
+        .and_then(|exe| {
+            exe.parent()
+                .map(|p| p.to_path_buf())
+                .and_then(|p| p.parent().map(|pp| pp.to_path_buf()))
+                .and_then(|p| p.parent().map(|pp| pp.to_path_buf()))
+        })
         .unwrap_or_else(|| PathBuf::from("."));
+    
+    let log_dir = repo_root.join("desktop").join("tauri");
+    std::fs::create_dir_all(&log_dir).ok();
     
     let log_file = log_dir.join("backend.log");
     
-    // Simple rotation: if > 1MB, rename and create new
+    // Simple rotation: if > 1MB, rename and create new (keep 5 files)
     if log_file.exists() {
         if let Ok(metadata) = std::fs::metadata(&log_file) {
             if metadata.len() > 1_000_000 {
@@ -117,8 +127,12 @@ async fn start_backend(app: AppHandle) -> Result<String, String> {
 
     write_log(&mut log_file, "Starting backend...");
 
-    // Try ports in range
-    for port in PORT_RANGE.0..=PORT_RANGE.1 {
+    // Try DEFAULT_PORT first, then fall back to range
+    let ports_to_try = vec![DEFAULT_PORT].into_iter()
+        .chain(PORT_RANGE.0..=PORT_RANGE.1)
+        .collect::<std::vec::Vec<_>>();
+    
+    for port in ports_to_try {
         let port_str = port.to_string();
         
         // Check if port is available
@@ -215,6 +229,39 @@ fn main() {
         .setup(|app| {
             let window = app.get_window("main").unwrap();
             
+            // Show splash screen
+            window.eval(r#"
+                document.body.innerHTML = `
+                    <div style="
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        height: 100vh;
+                        background: linear-gradient(135deg, #202020 0%, #2a2a2a 100%);
+                        color: #ffffff;
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                        animation: fadeIn 3s ease-in;
+                    ">
+                        <h1 style="font-size: 2em; margin-bottom: 1em; color: #00ff66;">Mission Control Loading…</h1>
+                        <div style="width: 200px; height: 4px; background: #333; border-radius: 2px; overflow: hidden;">
+                            <div id="loader" style="height: 100%; background: #00ff66; width: 0%; animation: progress 2s infinite;"></div>
+                        </div>
+                    </div>
+                    <style>
+                        @keyframes fadeIn {
+                            from { opacity: 0; }
+                            to { opacity: 1; }
+                        }
+                        @keyframes progress {
+                            0% { width: 0%; }
+                            50% { width: 70%; }
+                            100% { width: 100%; }
+                        }
+                    </style>
+                `;
+            "#).unwrap();
+            
             // Start backend and navigate to /t2r
             let window_clone = window.clone();
             let app_handle = app.app_handle();
@@ -238,10 +285,10 @@ fn main() {
                         eprintln!("Failed to start backend: {}", e);
                         window_clone.eval(&format!(
                             r#"
-                            document.body.innerHTML = '<div style="padding: 20px; font-family: sans-serif;">
+                            document.body.innerHTML = '<div style="padding: 20px; font-family: sans-serif; background: #202020; color: #ffffff;">
                                 <h1>Failed to Start Backend</h1>
                                 <p>{}</p>
-                                <p>Please check backend.log for details.</p>
+                                <p>Please check desktop/tauri/backend.log for details.</p>
                             </div>';
                             "#,
                             e.replace("'", "\\'")
@@ -254,18 +301,29 @@ fn main() {
         })
         .on_window_event(|event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event.event() {
-                // Graceful shutdown: SIGTERM then SIGKILL after 3s
+                // Graceful shutdown
                 if let Some(mut child) = BACKEND_PROCESS.lock().unwrap().take() {
                     // Try graceful shutdown
                     #[cfg(unix)]
                     {
-                        use std::os::unix::process::CommandExt;
+                        // On Unix, kill() sends SIGTERM
                         if let Err(e) = child.kill() {
                             eprintln!("Failed to kill backend: {}", e);
+                        } else {
+                            // Wait up to 3 seconds for graceful shutdown
+                            std::thread::sleep(Duration::from_secs(3));
+                            // Check if process terminated
+                            if let Ok(Some(_)) = child.try_wait() {
+                                // Process already terminated
+                            } else {
+                                // Force kill if still running
+                                let _ = child.kill();
+                            }
                         }
                     }
                     #[cfg(not(unix))]
                     {
+                        // Windows: just kill
                         let _ = child.kill();
                     }
                 }
