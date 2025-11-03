@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==========================================================
-# VIBE CODING INFRA ENVIRONMENT VERIFIER v1.0
-# Step 15: Validate required tooling before development.
+# Kat Records Studio Environment Verifier
+# Validate required tooling before development.
 # ==========================================================
 
 set -euo pipefail

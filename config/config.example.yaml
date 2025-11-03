@@ -1,0 +1,66 @@
+# Kat Records Studio - Unified Configuration Template
+#
+# Copy this file to `config/config.yaml` and adjust values for your environment.
+# Environment variables can override values using the `KATREC_` prefix, e.g.
+# `KATREC_LIBRARY_SONG_LIBRARY_ROOT=/Volumes/Media/Library`.
+
+library:
+  # Absolute path to the local song library on disk.
+  song_library_root: "/Users/example/Music/KatRecordsLibrary"
+
+  # Where the generated song catalog and usage logs are stored.
+  output_catalog: "data/song_library.csv"
+  usage_log: "data/song_usage.csv"
+
+  # List of supported audio file extensions.
+  audio_extensions:
+    - .mp3
+    - .wav
+    - .flac
+    - .m4a
+    - .aac
+
+paths:
+  # Output directory for rendered assets (mixes, renders, etc.)
+  output_dir: "output"
+
+  # Location of sound effect assets (needle start / vinyl noise).
+  sfx_dir: "assets/sfx"
+
+workflow:
+  # Primary workflow definition file.
+  config_file: "config/workflow.yml"
+
+  # Optional synchronization overrides for the workflow console.
+  auto_sync:
+    enabled: true
+    interval_seconds: 5
+
+api:
+  provider: "openai"
+  keys:
+    openai: "${OPENAI_API_KEY}"
+
+youtube:
+  client_secrets_file: "config/google/client_secrets.json"
+  token_file: "config/google/youtube_token.json"
+  upload_defaults:
+    privacyStatus: "unlisted"  # Options: private, unlisted, public
+    categoryId: 10  # Music category
+    tags:
+      - "lofi"
+      - "music"
+      - "Kat Records"
+      - "chill"
+  quota_limit_daily: 9000  # Daily API quota limit
+  playlist_id: null  # Optional: YouTube playlist ID to automatically add uploaded videos to (e.g., "PLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+
+web:
+  host: "127.0.0.1"
+  port: 8080
+  auto_open_browser: true
+  access_token: null  # 设置字符串以启用访问令牌校验
+  allowed_hosts:
+    - "127.0.0.1"
+    - "::1"
+    - "localhost"

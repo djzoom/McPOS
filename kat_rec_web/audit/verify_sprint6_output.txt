@@ -1,0 +1,33 @@
+\n== HEALTH ==
+{
+  "status": "healthy",
+  "mode": "mock",
+  "environment": {
+    "paths_valid": null
+  }
+}
+\n== METRICS SYSTEM ==
+{
+  "cpu": null,
+  "mem_mb": null,
+  "uptime": null,
+  "ws": null
+}
+\n== METRICS WS-HEALTH ==
+{
+  "active": null,
+  "status_count": null,
+  "events_count": null
+}
+\n== PLAN (dry) ==
+{
+  "status": null,
+  "recipe_json_path": null
+}
+\n== RUN (dry_run) ==
+{
+  "status": null,
+  "run_id": null,
+  "stages": null
+}
+\n== FILES ==

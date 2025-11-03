@@ -1,12 +1,17 @@
 version: "3.9"
 
 services:
-  app:
-    image: python:3.11-slim
-    working_dir: /workspace
+  katrec:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: katrec:latest
+    working_dir: /app
     volumes:
-      - ../:/workspace
-    command: python src/main.py
+      - ../assets:/app/assets:ro
+      - ../data:/app/data
+      - ../output:/app/output
     environment:
-      - APP_ENV=development
-      - LOG_LEVEL=INFO
+      - TZ=Etc/UTC
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    command: ["python", "scripts/local_picker/create_mixtape.py", "--no-remix", "--no-video"]
