@@ -36,7 +36,7 @@ app:dev:
 	pnpm -C desktop/tauri tauri dev
 
 app:build:
-	pnpm -C kat_rec_web/frontend export && pnpm -C desktop/tauri tauri build
+	cd kat_rec_web/frontend && NEXT_OUTPUT_MODE=export pnpm build && cd ../../ && pnpm -C desktop/tauri tauri build
 
 app:verify:
 	bash scripts/verify_app.sh
