@@ -2,10 +2,13 @@
 
 import { useState } from 'react'
 import { Download, FileText } from 'lucide-react'
+import { getAuditReport } from '@/services/t2rApi'
 
 export function AuditTrail() {
   const [reportType, setReportType] = useState<'daily' | 'weekly' | 'custom'>('daily')
   const [format, setFormat] = useState<'json' | 'csv' | 'markdown'>('json')
+  const [report, setReport] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(false)
 
   return (
     <div className="space-y-6">
@@ -42,15 +45,52 @@ export function AuditTrail() {
 
         {/* Generate Button */}
         <div className="flex gap-2">
-          <button className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors">
+          <button
+            onClick={async () => {
+              setIsLoading(true)
+              try {
+                const result = await getAuditReport({
+                  report_type: reportType,
+                  format,
+                })
+                setReport(result)
+              } catch (error) {
+                console.error('生成报告失败:', error)
+                setReport({ error: String(error) })
+              } finally {
+                setIsLoading(false)
+              }
+            }}
+            disabled={isLoading}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 transition-colors"
+          >
             <FileText className="w-4 h-4" />
-            生成报告
+            {isLoading ? '生成中...' : '生成报告'}
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors">
+          <button
+            onClick={() => {
+              if (!report) return
+              const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = `audit_${reportType}_${new Date().toISOString().split('T')[0]}.${format}`
+              a.click()
+            }}
+            disabled={!report}
+            className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 transition-colors"
+          >
             <Download className="w-4 h-4" />
             导出
           </button>
         </div>
+
+        {/* Report Display */}
+        {report && !report.error && (
+          <div className="mt-4 p-4 bg-dark-bg-secondary rounded border border-dark-border max-h-96 overflow-y-auto">
+            <pre className="text-xs">{JSON.stringify(report, null, 2)}</pre>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -6,10 +6,9 @@ from pathlib import Path
 import websockets
 
 
-async def collect(destination: Path, stats_path: Path, duration: float = 12.0, target: int = 20):
+async def collect(destination: Path, stats_path: Path, duration: float = 12.0, target: int = 20, uri: str = "ws://localhost:8000/ws/events"):
     destination.parent.mkdir(parents=True, exist_ok=True)
     stats_path.parent.mkdir(parents=True, exist_ok=True)
-    uri = "ws://localhost:8000/ws/events"
     messages = []
     versions = []
     dup_count = 0
@@ -80,9 +79,22 @@ async def collect(destination: Path, stats_path: Path, duration: float = 12.0, t
 
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="WebSocket probe for T2R events")
+    parser.add_argument("--endpoint", default="ws://localhost:8000/ws/events", 
+                        help="WebSocket endpoint URL")
+    parser.add_argument("--seconds", type=float, default=12.0,
+                        help="Duration to collect messages (seconds)")
+    parser.add_argument("--target", type=int, default=20,
+                        help="Target number of messages to collect")
+    args = parser.parse_args()
+    
     asyncio.run(
         collect(
             Path("audit/ws_sample.jsonl"),
             Path("audit/ws_stats.json"),
+            duration=args.seconds,
+            target=args.target,
+            uri=args.endpoint,
         )
     )

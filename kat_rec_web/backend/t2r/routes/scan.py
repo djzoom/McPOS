@@ -9,7 +9,7 @@ from datetime import datetime
 import logging
 
 from ..services.schedule_service import scan_and_lock
-from ...routes.websocket import broadcast_t2r_event
+from routes.websocket import broadcast_t2r_event
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

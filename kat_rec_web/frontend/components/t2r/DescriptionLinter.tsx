@@ -3,16 +3,31 @@
 import { useState } from 'react'
 import { FileText, Wand2 } from 'lucide-react'
 import { useT2RDescStore } from '@/stores/t2rDescStore'
+import { lintDescription } from '@/services/t2rApi'
 
 export function DescriptionLinter() {
-  const { flags, suggestions, fixedDescription, setDescription } = useT2RDescStore()
+  const { flags, suggestions, fixedDescription, setDescription, setFlags, setSuggestions } = useT2RDescStore()
   const [description, setLocalDescription] = useState('')
+  const [episodeId, setEpisodeId] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
 
   return (
     <div className="space-y-6">
       <div className="card p-4">
         <h2 className="text-xl font-semibold mb-4">描述规范化</h2>
         
+        {/* Episode ID Input */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium mb-2">期数 ID</label>
+          <input
+            type="text"
+            value={episodeId}
+            onChange={(e) => setEpisodeId(e.target.value)}
+            placeholder="例如: 20251102"
+            className="w-full px-3 py-2 bg-dark-bg-secondary border border-dark-border rounded text-dark-text-primary mb-2"
+          />
+        </div>
+
         {/* Description Input */}
         <div className="mb-4">
           <label className="block text-sm font-medium mb-2">描述内容</label>
@@ -30,11 +45,58 @@ export function DescriptionLinter() {
 
         {/* Actions */}
         <div className="flex gap-2 mb-4">
-          <button className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors">
+          <button
+            onClick={async () => {
+              if (!episodeId || !description) return
+              setIsLoading(true)
+              try {
+                const result = await lintDescription({
+                  episode_id: episodeId,
+                  description,
+                  auto_fix: false,
+                })
+                // Update store with results
+                if (result.flags) {
+                  useT2RDescStore.getState().setFlags(result.flags)
+                }
+                if (result.suggestions) {
+                  useT2RDescStore.getState().setSuggestions(result.suggestions)
+                }
+              } catch (error) {
+                console.error('描述检查失败:', error)
+              } finally {
+                setIsLoading(false)
+              }
+            }}
+            disabled={isLoading || !episodeId || !description}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 transition-colors"
+          >
             <FileText className="w-4 h-4" />
-            检查
+            {isLoading ? '检查中...' : '检查'}
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors">
+          <button
+            onClick={async () => {
+              if (!episodeId || !description) return
+              setIsLoading(true)
+              try {
+                const result = await lintDescription({
+                  episode_id: episodeId,
+                  description,
+                  auto_fix: true,
+                })
+                if (result.fixed_description) {
+                  setLocalDescription(result.fixed_description)
+                  setDescription(result.fixed_description)
+                }
+              } catch (error) {
+                console.error('自动修正失败:', error)
+              } finally {
+                setIsLoading(false)
+              }
+            }}
+            disabled={isLoading || !episodeId || !description}
+            className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 transition-colors"
+          >
             <Wand2 className="w-4 h-4" />
             自动修正
           </button>

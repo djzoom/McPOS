@@ -11,7 +11,7 @@ import psutil
 import os
 import time
 
-from ...routes.websocket import status_manager, events_manager
+from routes.websocket import status_manager, events_manager
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

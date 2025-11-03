@@ -3,10 +3,14 @@
 import { useState } from 'react'
 import { Play, FileText, Settings } from 'lucide-react'
 import { useRunbookStore } from '@/stores/runbookStore'
+import { useT2RScheduleStore } from '@/stores/t2rScheduleStore'
+import { planEpisode, runEpisode } from '@/services/t2rApi'
 
 export function PlanAndRun() {
   const { currentStage, progress, logs, isRunning } = useRunbookStore()
   const [episodeId, setEpisodeId] = useState('')
+  const [recipe, setRecipe] = useState<any>(null)
+  const [isPlanning, setIsPlanning] = useState(false)
 
   return (
     <div className="space-y-6">
@@ -24,9 +28,31 @@ export function PlanAndRun() {
               placeholder="例如: 20251102"
               className="flex-1 px-3 py-2 bg-dark-bg-secondary border border-dark-border rounded text-dark-text-primary"
             />
-            <button className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors">
+            <button
+              onClick={async () => {
+                if (!episodeId) return
+                setIsPlanning(true)
+                try {
+                  const result = await planEpisode({
+                    episode_id: episodeId,
+                  })
+                  setRecipe(result)
+                  // Refresh KPIs after successful plan
+                  if (result.status === 'ok') {
+                    // Trigger scan refresh to update KPIs
+                    useT2RScheduleStore.getState().setLoading(false)
+                  }
+                } catch (error) {
+                  console.error('生成计划失败:', error)
+                } finally {
+                  setIsPlanning(false)
+                }
+              }}
+              disabled={isPlanning || !episodeId}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 transition-colors"
+            >
               <FileText className="w-4 h-4" />
-              生成 Recipe
+              {isPlanning ? '生成中...' : '生成 Recipe'}
             </button>
           </div>
         </div>
@@ -36,6 +62,17 @@ export function PlanAndRun() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold">执行 Runbook</h3>
             <button
+              onClick={async () => {
+                if (!episodeId || isRunning) return
+                try {
+                  await runEpisode({
+                    episode_id: episodeId,
+                  })
+                  // WebSocket will update progress via store
+                } catch (error) {
+                  console.error('执行失败:', error)
+                }
+              }}
               disabled={!episodeId || isRunning}
               className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 transition-colors"
             >
