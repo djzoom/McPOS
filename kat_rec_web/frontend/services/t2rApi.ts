@@ -24,8 +24,37 @@ async function apiRequest<T>(endpoint: string, options?: RequestInit): Promise<T
 }
 
 // Scan and Lock
-export async function scanSchedule() {
-  return apiRequest('/api/t2r/scan', { method: 'POST' })
+export interface ScanResponse {
+  status: 'ok' | 'error'
+  summary?: {
+    locked_count: number
+    conflicts_count?: number
+    conflicts?: Array<{
+      type: string
+      asset: string
+      episodes: string[]
+    }>
+    asset_usage?: {
+      total_episodes?: number
+      duplicate_images?: number
+      images?: Record<string, string[]>
+      songs?: Record<string, string[]>
+      episodes?: Record<string, any>
+    }
+  }
+  data?: {
+    locked_count: number
+    conflicts?: Array<{
+      type: string
+      asset: string
+      episodes: string[]
+    }>
+  }
+  errors?: string[]
+}
+
+export async function scanSchedule(): Promise<ScanResponse> {
+  return apiRequest<ScanResponse>('/api/t2r/scan', { method: 'POST' })
 }
 
 // SRT Operations
@@ -34,8 +63,19 @@ export interface SRTInspectRequest {
   file_path?: string
 }
 
-export async function inspectSRT(request: SRTInspectRequest) {
-  return apiRequest('/api/t2r/srt/inspect', {
+export interface SRTInspectResponse {
+  status: 'ok' | 'error'
+  issues?: Array<{
+    type: string
+    message: string
+    start?: string
+    end?: string
+  }>
+  errors?: string[]
+}
+
+export async function inspectSRT(request: SRTInspectRequest): Promise<SRTInspectResponse> {
+  return apiRequest<SRTInspectResponse>('/api/t2r/srt/inspect', {
     method: 'POST',
     body: JSON.stringify(request),
   })
@@ -47,8 +87,15 @@ export interface SRTFixRequest {
   dry_run?: boolean
 }
 
-export async function fixSRT(request: SRTFixRequest) {
-  return apiRequest('/api/t2r/srt/fix', {
+export interface SRTFixResponse {
+  status: 'ok' | 'error'
+  diff?: string
+  fixed_path?: string
+  errors?: string[]
+}
+
+export async function fixSRT(request: SRTFixRequest): Promise<SRTFixResponse> {
+  return apiRequest<SRTFixResponse>('/api/t2r/srt/fix', {
     method: 'POST',
     body: JSON.stringify(request),
   })
@@ -61,8 +108,27 @@ export interface DescLintRequest {
   auto_fix?: boolean
 }
 
-export async function lintDescription(request: DescLintRequest) {
-  return apiRequest('/api/t2r/desc/lint', {
+export interface DescFlag {
+  type: 'branding_misuse' | 'cc0_missing' | 'seo_weak'
+  message: string
+}
+
+export interface DescSuggestion {
+  type: string
+  issue: string
+  fix: string
+}
+
+export interface DescLintResponse {
+  status: 'ok' | 'error'
+  flags?: DescFlag[]
+  suggestions?: DescSuggestion[]
+  fixed_description?: string
+  errors?: string[]
+}
+
+export async function lintDescription(request: DescLintRequest): Promise<DescLintResponse> {
+  return apiRequest<DescLintResponse>('/api/t2r/desc/lint', {
     method: 'POST',
     body: JSON.stringify(request),
   })
@@ -76,8 +142,20 @@ export interface PlanRequest {
   seo_template?: boolean
 }
 
-export async function planEpisode(request: PlanRequest) {
-  return apiRequest('/api/t2r/plan', {
+export interface PlanResponse {
+  status: 'ok' | 'error'
+  summary?: {
+    episode_id: string
+    recipe_saved: boolean
+  }
+  recipe?: any
+  recipe_json_path?: string
+  cli_command?: string
+  errors?: string[]
+}
+
+export async function planEpisode(request: PlanRequest): Promise<PlanResponse> {
+  return apiRequest<PlanResponse>('/api/t2r/plan', {
     method: 'POST',
     body: JSON.stringify(request),
   })
@@ -90,8 +168,23 @@ export interface RunRequest {
   dry_run?: boolean
 }
 
-export async function runEpisode(request: RunRequest) {
-  return apiRequest('/api/t2r/run', {
+export interface RunResponse {
+  status: 'ok' | 'error'
+  summary?: {
+    run_id: string
+    background?: boolean
+    dry_run?: boolean
+    stages?: string[]
+  }
+  run_id?: string
+  current_stage?: string
+  progress?: number
+  message?: string
+  errors?: string[]
+}
+
+export async function runEpisode(request: RunRequest): Promise<RunResponse> {
+  return apiRequest<RunResponse>('/api/t2r/run', {
     method: 'POST',
     body: JSON.stringify(request),
   })
@@ -121,8 +214,21 @@ export interface UploadVerifyRequest {
   platform?: string
 }
 
-export async function verifyUpload(request: UploadVerifyRequest) {
-  return apiRequest('/api/t2r/upload/verify', {
+export interface UploadVerifyResponse {
+  status: 'ok' | 'error'
+  episode_id?: string
+  video_id?: string
+  checks?: Array<{
+    name: string
+    status: 'passed' | 'failed' | 'warning'
+    message: string
+  }>
+  all_passed?: boolean
+  errors?: string[]
+}
+
+export async function verifyUpload(request: UploadVerifyRequest): Promise<UploadVerifyResponse> {
+  return apiRequest<UploadVerifyResponse>('/api/t2r/upload/verify', {
     method: 'POST',
     body: JSON.stringify(request),
   })
@@ -136,7 +242,18 @@ export interface AuditRequest {
   report_type?: 'daily' | 'weekly' | 'custom'
 }
 
-export async function getAuditReport(request: AuditRequest = {}) {
+export interface AuditReport {
+  status: 'ok' | 'error'
+  report_type?: string
+  format?: string
+  start_date?: string
+  end_date?: string
+  data?: any
+  content?: string
+  errors?: string[]
+}
+
+export async function getAuditReport(request: AuditRequest = {}): Promise<AuditReport> {
   const params = new URLSearchParams()
   if (request.start_date) params.set('start_date', request.start_date)
   if (request.end_date) params.set('end_date', request.end_date)
@@ -144,6 +261,6 @@ export async function getAuditReport(request: AuditRequest = {}) {
   if (request.report_type) params.set('report_type', request.report_type)
   
   const query = params.toString()
-  return apiRequest(`/api/t2r/audit${query ? `?${query}` : ''}`)
+  return apiRequest<AuditReport>(`/api/t2r/audit${query ? `?${query}` : ''}`)
 }
 

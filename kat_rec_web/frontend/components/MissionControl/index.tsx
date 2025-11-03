@@ -5,7 +5,7 @@ import { useMemo } from 'react'
 import { HealthMetrics } from './HealthMetrics'
 import { QueueStatus } from './QueueStatus'
 import { TrendChart } from './TrendChart'
-import { fetchSummary, fetchEpisodes } from '@/services/api'
+import { fetchSummary, fetchEpisodes, type Episode as ApiEpisode, type SummaryData } from '@/services/api'
 import type { Episode } from './types'
 
 function calculateSuccessRate(episodes: Episode[]): number {
@@ -68,7 +68,20 @@ export function MissionControl() {
     )
   }
 
-  const episodes = episodesData?.episodes || []
+  // Convert API episodes to component Episode type
+  const episodes: Episode[] = (episodesData?.episodes || []).map((ep: ApiEpisode): Episode => ({
+    episode_id: ep.episode_id,
+    episode_number: ep.episode_number ?? 0,
+    schedule_date: ep.schedule_date ?? '',
+    status: ep.status,
+    title: undefined,
+    image_path: undefined,
+    tracks_used: undefined,
+    starting_track: undefined,
+    youtube_video_id: undefined,
+    metadata_updated_at: undefined,
+  }))
+  
   const successRate = calculateSuccessRate(episodes)
   const failedCount = episodes.filter((ep) => ep.status === 'error').length
 

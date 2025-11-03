@@ -75,18 +75,37 @@ export function SRTDoctor() {
                   episode_id: episodeId || undefined,
                   file_path: filePath || undefined,
                 })
-                setIssues(result.issues || [])
+                // Convert API issues to store issues format
+                const apiIssues = result?.issues || []
+                const storeIssues = apiIssues.map((issue: any) => ({
+                  type: (issue.type === 'overlap' || issue.type === 'gap' || issue.type === 'encoding') 
+                    ? issue.type 
+                    : 'encoding' as 'overlap' | 'gap' | 'encoding',
+                  start: issue.start,
+                  end: issue.end,
+                  line1: issue.line1,
+                  line2: issue.line2,
+                  gap_duration: issue.gap_duration,
+                  severity: 'warning' as const, // Default severity
+                }))
+                setIssues(storeIssues)
                 // Refresh KPIs if successful
-                if (result.status === 'ok') {
+                if (result?.status === 'ok') {
                   // Trigger scan refresh to update asset usage
                   const scanResult = await scanSchedule()
                   if (scanResult?.summary?.asset_usage) {
-                    useT2RAssetsStore.getState().setAssetUsage(scanResult.summary.asset_usage)
+                    const assetUsageData = {
+                      images: scanResult.summary.asset_usage.images || {},
+                      songs: scanResult.summary.asset_usage.songs || {},
+                      episodes: scanResult.summary.asset_usage.episodes || {},
+                    }
+                    useT2RAssetsStore.getState().setAssetUsage(assetUsageData)
                   }
                 }
               } catch (error) {
                 console.error('SRT检查失败:', error)
-                setIssues([{ type: 'error', message: String(error) }])
+                // Store doesn't have message field, just set empty issues array on error
+                setIssues([{ type: 'encoding', severity: 'error' as const }])
               } finally {
                 setIsLoading(false)
               }
@@ -106,7 +125,14 @@ export function SRTDoctor() {
                   episode_id: episodeId,
                   strategy: 'clip',
                 })
-                setFixResult(result)
+                // Convert API fix result to store format
+                const fixResult = {
+                  fixed: result?.status === 'ok',
+                  diff: result?.diff,
+                  output_path: result?.fixed_path,
+                  changes: undefined,
+                }
+                setFixResult(fixResult)
               } catch (error) {
                 console.error('SRT修复失败:', error)
               } finally {
