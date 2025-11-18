@@ -1,0 +1,14 @@
+# Minimal package manifest (McPOS core only)
+include README.md
+include QUICK_START_CLI.md
+include pyproject.toml
+include requirements.txt
+
+recursive-include mcpos *.py *.md
+recursive-include scripts *.py
+recursive-include config *.yaml *.yml *.example.yaml
+recursive-include assets *.ttf *.otf *.png *.jpg *.jpeg
+
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude .DS_Store
