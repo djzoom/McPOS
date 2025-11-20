@@ -12,11 +12,6 @@
     <div class="main-container">
         <!-- Left Sidebar -->
         <div class="sidebar" id="sidebar">
-            <button class="sidebar-close-btn" id="sidebarClose" title="Close Menu">
-                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M19 12H5M12 19l-7-7 7-7"/>
-                </svg>
-            </button>
             <div class="header">
                 <h2>The Starry Night</h2>
             </div>
@@ -26,80 +21,60 @@
                     <p>A tribute to Vincent van Gogh's masterpiece</p>
                 </div>
                 <div class="action-buttons-row">
-                    <button id="btnRandom" class="action-btn-small">
+                    <button id="btnRandom" class="action-btn-small" title="Random">
                         <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8" cy="8" r="1.5"></circle><circle cx="16" cy="8" r="1.5"></circle><circle cx="8" cy="16" r="1.5"></circle><circle cx="16" cy="16" r="1.5"></circle><circle cx="12" cy="12" r="1.5"></circle></svg>
-                        <span class="btn-label">Random</span>
                     </button>
-                    <button id="btnResetParams" class="action-btn-small">
+                    <button id="btnResetParams" class="action-btn-small" title="Reset Params">
                         <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
-                        <span class="btn-label">Reset</span>
                     </button>
-                    <button id="btnReset" class="action-btn-small" title="Reset View">
+                    <button id="btnReset" class="action-btn-small" title="Re-center">
                         <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                        <span class="btn-label">View</span>
                     </button>
-                    <button id="btnFullscreen" class="action-btn-small">
+                    <button id="btnFullscreen" class="action-btn-small" title="Full-Screen">
                         <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
-                        <span class="btn-label">Full</span>
                     </button>
                 </div>
             </div>
 
             <div class="controls">
                 <div class="control-group">
-                    <label>Particle Blur</label>
+                    <label>Flow Strength</label>
                     <div class="slider-wrapper">
-                        <input type="range" id="blurLevel" min="0" max="10" step="1" value="5">
+                        <input type="range" id="flowStrength" min="0.000" max="0.016" step="0.001" value="0.008">
                         <div class="slider-center-marker"></div>
                     </div>
                 </div>
                 <div class="control-group">
-                    <label>Particle Opacity</label>
+                    <label>Animation Speed</label>
                     <div class="slider-wrapper">
-                        <input type="range" id="opacity" min="0.0" max="0.8" step="0.05" value="0.4">
+                        <input type="range" id="animationSpeed" min="0.3" max="0.7" step="0.1" value="0.5">
                         <div class="slider-center-marker"></div>
                     </div>
                 </div>
                 <div class="control-group">
-                    <label>Particle Count</label>
+                    <label>Zoom</label>
                     <div class="slider-wrapper">
-                        <input type="range" id="particleCount" min="1600" max="4000" step="100" value="2800">
-                        <div class="slider-center-marker"></div>
-                    </div>
-                </div>
-                <div class="control-group">
-                    <label>Particle Speed</label>
-                    <div class="slider-wrapper">
-                        <input type="range" id="speed" min="0.6" max="2.0" step="0.1" value="1.3">
-                        <div class="slider-center-marker"></div>
-                    </div>
-                </div>
-                <div class="control-group">
-                    <label>Trail Length</label>
-                    <div class="slider-wrapper">
-                        <input type="range" id="trailFade" min="0.05" max="0.15" step="0.005" value="0.1">
+                        <input type="range" id="zoom" min="2.5" max="5.1" step="0.1" value="3.8">
                         <div class="slider-center-marker"></div>
                     </div>
                 </div>
 
-                <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 10px 0;">
-
-                <div class="control-group">
-                    <label>Background Brightness</label>
+                <div class="control-group" style="margin-top: 20px;">
+                    <label>Brightness</label>
                     <div class="slider-wrapper">
                         <input type="range" id="brightness" min="0.4" max="2.0" step="0.1" value="1.2">
                         <div class="slider-center-marker"></div>
                     </div>
                 </div>
                 <div class="control-group">
-                    <label>Background Contrast</label>
+                    <label>Contrast</label>
                     <div class="slider-wrapper">
                         <input type="range" id="contrast" min="0.6" max="2.0" step="0.1" value="1.3">
                         <div class="slider-center-marker"></div>
                     </div>
                 </div>
                 <div class="control-group">
-                    <label>Background Saturation</label>
+                    <label>Saturation</label>
                     <div class="slider-wrapper">
                         <input type="range" id="saturation" min="0.0" max="2.8" step="0.1" value="1.4">
                         <div class="slider-center-marker"></div>
@@ -128,17 +103,88 @@
             <canvas id="canvas"></canvas>
         </div>
         
-        <!-- Sidebar Toggle Button -->
-        <button class="sidebar-toggle" id="sidebarToggle" title="Toggle Menu">
-            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M5 12h14M12 5l7 7-7 7"></path>
-            </svg>
-        </button>
     </div>
 
     <!-- Load scripts in correct order -->
-    <script src="image_data.js" defer></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r152/three.min.js" defer></script>
-    <script src="script.js" defer></script>
+    <script src="image_data.js"></script>
+    <!-- Three.js with multiple fallback CDNs -->
+    <script>
+        (function() {
+            // 尝试多个 CDN 源加载 Three.js
+            const threeJsSources = [
+                'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
+                'https://unpkg.com/three@0.128.0/build/three.min.js',
+                'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js',
+                'https://cdnjs.cloudflare.com/ajax/libs/three.js/r152/three.min.js'
+            ];
+            
+            let currentSourceIndex = 0;
+            let threeJsLoaded = false;
+            
+            function tryLoadThreeJs() {
+                if (typeof THREE !== 'undefined') {
+                    threeJsLoaded = true;
+                    console.log('Three.js already loaded');
+                    triggerStartExperience();
+                    return;
+                }
+                
+                if (currentSourceIndex >= threeJsSources.length) {
+                    console.error('All Three.js CDN sources failed to load');
+                    const loadingEl = document.getElementById('canvas-loading');
+                    if (loadingEl) {
+                        loadingEl.textContent = 'Three.js 加载失败，请检查网络连接或刷新页面';
+                    }
+                    return;
+                }
+                
+                const script = document.createElement('script');
+                script.src = threeJsSources[currentSourceIndex];
+                script.onload = () => {
+                    threeJsLoaded = true;
+                    console.log('Three.js loaded from:', threeJsSources[currentSourceIndex]);
+                    triggerStartExperience();
+                };
+                script.onerror = () => {
+                    console.warn('Failed to load Three.js from:', threeJsSources[currentSourceIndex]);
+                    currentSourceIndex++;
+                    tryLoadThreeJs();
+                };
+                document.head.appendChild(script);
+            }
+            
+            function triggerStartExperience() {
+                // 等待 script.js 加载完成
+                if (typeof startExperience === 'function') {
+                    startExperience();
+                } else {
+                    let attempts = 0;
+                    const maxAttempts = 100; // 最多等待 5 秒
+                    const checkInterval = setInterval(() => {
+                        attempts++;
+                        if (typeof startExperience === 'function') {
+                            clearInterval(checkInterval);
+                            startExperience();
+                        } else if (attempts >= maxAttempts) {
+                            clearInterval(checkInterval);
+                            console.error('script.js failed to load');
+                            const loadingEl = document.getElementById('canvas-loading');
+                            if (loadingEl) {
+                                loadingEl.textContent = '脚本加载失败，请刷新页面';
+                            }
+                        }
+                    }, 50);
+                }
+            }
+            
+            // 开始加载 Three.js
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', tryLoadThreeJs);
+            } else {
+                tryLoadThreeJs();
+            }
+        })();
+    </script>
+    <script src="script.js"></script>
 </body>
 </html>
