@@ -84,11 +84,13 @@ const STAR_FRAGMENT_SHADER = `
 `;
 
 const DEFAULT_SLIDERS = {
-    blurLevel: 5,
-    opacity: 0.4,
-    particleCount: 2800,
-    speed: 1.3,
-    trailFade: 0.1,
+    flowStrength: 0.008,
+    twinkleStrength: 0.0,
+    animationSpeed: 0.5,
+    tiltStrength: 0.0,
+    zoom: 3.8,
+    positionX: -1.0,
+    positionY: -0.8,
     brightness: 1.2,
     contrast: 1.3,
     saturation: 1.4
@@ -116,7 +118,7 @@ class StarryNightExperience {
         this.canvas = document.getElementById('canvas');
         this.loadingEl = document.getElementById('canvas-loading');
         this.container = this.canvas ? this.canvas.parentElement : null;
-        this.sidebar = document.getElementById('sidebar');
+        // Sidebar removed - no longer needed
 
         this.scene = null;
         this.camera = null;
@@ -127,19 +129,26 @@ class StarryNightExperience {
 
         this.mouse = null;
         this.targetMouse = null;
-        this.targetZoom = 2.6;
-        this.minZoom = 1.6;
-        this.maxZoom = 5.0;
+        this.targetZoom = DEFAULT_SLIDERS.zoom;
+        this.minZoom = 2.5;
+        this.maxZoom = 5.1;
 
         this.sliders = {};
+        
+        // 拖拽相关
+        this.isDragging = false;
+        this.dragStart = null;
+        this.dragStartPosition = null;
+        this.imageAspect = null; // 保存图片的原始宽高比
 
         this.config = {
-            warpStrength: convertBlur(DEFAULT_SLIDERS.blurLevel),
-            twinkleStrength: convertTwinkle(DEFAULT_SLIDERS.opacity),
-            flowScale: convertFlowScale(DEFAULT_SLIDERS.particleCount),
-            animationSpeed: DEFAULT_SLIDERS.speed,
-            tiltStrength: convertTilt(DEFAULT_SLIDERS.trailFade),
-            flowStrength: 0.015
+            flowStrength: DEFAULT_SLIDERS.flowStrength,
+            twinkleStrength: DEFAULT_SLIDERS.twinkleStrength,
+            animationSpeed: DEFAULT_SLIDERS.animationSpeed,
+            tiltStrength: DEFAULT_SLIDERS.tiltStrength,
+            zoom: DEFAULT_SLIDERS.zoom,
+            positionX: DEFAULT_SLIDERS.positionX,
+            positionY: DEFAULT_SLIDERS.positionY
         };
 
         this.init();
@@ -148,10 +157,20 @@ class StarryNightExperience {
     init() {
         if (!this.canvas || !this.container) {
             console.error('Starry Night canvas element not found.');
+            if (this.loadingEl) {
+                this.loadingEl.textContent = 'Canvas element not found';
+            }
             return;
         }
         if (typeof THREE === 'undefined') {
             console.error('Three.js failed to load.');
+            if (this.loadingEl) {
+                this.loadingEl.textContent = 'Three.js 加载失败，请刷新页面';
+            }
+            // 尝试重新加载 Three.js
+            setTimeout(() => {
+                location.reload();
+            }, 3000);
             return;
         }
 
@@ -162,6 +181,13 @@ class StarryNightExperience {
         this.initRenderer();
         this.bindPointerEvents();
         this.loadStarryNightTexture();
+        
+        // 监听全屏状态变化，确保画布按比例缩放
+        document.addEventListener('fullscreenchange', () => {
+            setTimeout(() => {
+                this.updateRendererSize();
+            }, 100);
+        });
 
         const fps = document.getElementById('fps');
         if (fps) {
@@ -170,78 +196,92 @@ class StarryNightExperience {
     }
 
     initUI() {
-        this.setupSidebarToggle();
+        // setupSidebarToggle removed - sidebar toggle functionality removed
         this.setupSliders();
         this.setupButtons();
         this.applyCanvasFilters();
     }
 
-    setupSidebarToggle() {
-        const toggle = document.getElementById('sidebarToggle');
-        const close = document.getElementById('sidebarClose');
-        const handleToggle = () => {
-            if (!this.sidebar) return;
-            this.sidebar.classList.toggle('hidden');
-        };
-        if (toggle) toggle.addEventListener('click', handleToggle);
-        if (close) close.addEventListener('click', handleToggle);
+    // setupSidebarToggle removed - sidebar toggle functionality removed
+
+    // 格式化数值显示
+    formatValue(value, step) {
+        if (step >= 1) {
+            return value.toFixed(0);
+        } else if (step >= 0.1) {
+            return value.toFixed(1);
+        } else if (step >= 0.01) {
+            return value.toFixed(2);
+        } else {
+            return value.toFixed(3);
+        }
+    }
+
+    // 更新推子值显示
+    updateSliderValueDisplay(sliderId) {
+        const slider = this.sliders[sliderId];
+        const displayEl = document.getElementById(sliderId + 'Value');
+        if (!slider || !displayEl) return;
+        
+        const min = Number(slider.min);
+        const max = Number(slider.max);
+        const step = Number(slider.step);
+        const current = Number(slider.value);
+        
+        const minStr = this.formatValue(min, step);
+        const maxStr = this.formatValue(max, step);
+        const currentStr = this.formatValue(current, step);
+        
+        displayEl.textContent = `[${minStr} - ${maxStr}] ${currentStr}`;
     }
 
     setupSliders() {
-        const sliderIds = ['blurLevel', 'opacity', 'particleCount', 'speed', 'trailFade', 'brightness', 'contrast', 'saturation'];
+        const sliderIds = ['flowStrength', 'animationSpeed', 'zoom', 'brightness', 'contrast', 'saturation'];
         sliderIds.forEach((id) => {
             const input = document.getElementById(id);
             if (!input) return;
             input.dataset.defaultValue = input.value;
             this.sliders[id] = input;
+            // 初始化显示值
+            this.updateSliderValueDisplay(id);
         });
 
-        const blur = this.sliders.blurLevel;
-        if (blur) {
-            blur.addEventListener('input', (event) => {
-                const value = Number(event.target.value);
-                this.config.warpStrength = convertBlur(value);
+        const flowStrength = this.sliders.flowStrength;
+        if (flowStrength) {
+            flowStrength.addEventListener('input', (event) => {
+                this.config.flowStrength = Number(event.target.value);
                 this.updateShaderConfig();
+                this.updateSliderValueDisplay('flowStrength');
             });
         }
 
-        const opacity = this.sliders.opacity;
-        if (opacity) {
-            opacity.addEventListener('input', (event) => {
-                const value = Number(event.target.value);
-                this.config.twinkleStrength = convertTwinkle(value);
-                this.updateShaderConfig();
-            });
-        }
-
-        const particleCount = this.sliders.particleCount;
-        if (particleCount) {
-            particleCount.addEventListener('input', (event) => {
-                const value = Number(event.target.value);
-                this.config.flowScale = convertFlowScale(value);
-                this.updateShaderConfig();
-            });
-        }
-
-        const speed = this.sliders.speed;
-        if (speed) {
-            speed.addEventListener('input', (event) => {
+        const animationSpeed = this.sliders.animationSpeed;
+        if (animationSpeed) {
+            animationSpeed.addEventListener('input', (event) => {
                 this.config.animationSpeed = Number(event.target.value);
                 this.updateShaderConfig();
+                this.updateSliderValueDisplay('animationSpeed');
             });
         }
 
-        const trailFade = this.sliders.trailFade;
-        if (trailFade) {
-            trailFade.addEventListener('input', (event) => {
-                this.config.tiltStrength = convertTilt(Number(event.target.value));
+        const zoom = this.sliders.zoom;
+        if (zoom) {
+            zoom.addEventListener('input', (event) => {
+                const value = Number(event.target.value);
+                this.config.zoom = value;
+                this.targetZoom = value;
+                this.updateSliderValueDisplay('zoom');
             });
         }
+
 
         ['brightness', 'contrast', 'saturation'].forEach((id) => {
             const input = this.sliders[id];
             if (!input) return;
-            input.addEventListener('input', () => this.applyCanvasFilters());
+            input.addEventListener('input', () => {
+                this.applyCanvasFilters();
+                this.updateSliderValueDisplay(id);
+            });
         });
     }
 
@@ -274,12 +314,45 @@ class StarryNightExperience {
         this.scene.background = new THREE.Color(0x050505);
         this.camera = new THREE.PerspectiveCamera(45, this.getAspect(), 0.1, 100);
         this.camera.position.z = this.targetZoom;
+        this.camera.position.x = 0;
+        this.camera.position.y = 0;
         this.updateRendererSize();
     }
 
     getAspect() {
         if (!this.container) return window.innerWidth / Math.max(window.innerHeight, 1);
         return this.container.clientWidth / Math.max(this.container.clientHeight, 1);
+    }
+
+    // 将像素值转换为场景单位
+    pixelsToSceneUnits(pixels) {
+        if (!this.camera || !this.container) return pixels * 0.001;
+        const height = this.container.clientHeight;
+        const fov = this.camera.fov * (Math.PI / 180); // 转换为弧度
+        const distance = this.camera.position.z;
+        // 计算视野高度
+        const viewHeight = 2 * distance * Math.tan(fov / 2);
+        // 将像素转换为场景单位
+        return (pixels / height) * viewHeight;
+    }
+
+    // 自动对齐窗口并校验位置
+    autoAlignAndValidate() {
+        if (!this.mesh || !this.camera || !this.container) return;
+        
+        // 使用默认位置值
+        const finalX = DEFAULT_SLIDERS.positionX;
+        const finalY = DEFAULT_SLIDERS.positionY;
+        
+        // 更新mesh位置
+        this.mesh.position.x = finalX;
+        this.mesh.position.y = finalY;
+        
+        // 更新配置
+        this.config.positionX = finalX;
+        this.config.positionY = finalY;
+        
+        // 不再更新推子（已移除Position X/Y推子）
     }
 
     updateRendererSize() {
@@ -295,31 +368,145 @@ class StarryNightExperience {
         }
         if (this.uniforms) {
             this.uniforms.uResolution.value.set(width, height);
+            // 如果 mesh 已创建，重新计算平面大小（保持原始宽高比，等比例缩放）
+            if (this.mesh && this.uniforms.uTexture.value && this.imageAspect) {
+                const aspect = this.imageAspect; // 使用保存的原始宽高比
+                let planeWidth, planeHeight;
+                
+                // 计算相机的视野尺寸
+                const fov = this.camera.fov * (Math.PI / 180);
+                const distance = this.camera.position.z;
+                const viewHeight = 2 * distance * Math.tan(fov / 2);
+                const viewWidth = viewHeight * this.getAspect();
+                
+                // 根据视野尺寸和图片宽高比，计算合适的画布尺寸
+                // 确保画布完整显示在视野内，保持原始宽高比，等比例缩放
+                const scale = 0.475; // 缩小到一半
+                if (aspect > this.getAspect()) {
+                    // 图片更宽，以视野宽度为准，保持原始宽高比
+                    planeWidth = viewWidth * scale;
+                    planeHeight = planeWidth / aspect;
+                } else {
+                    // 图片更高，以视野高度为准，保持原始宽高比
+                    planeHeight = viewHeight * scale;
+                    planeWidth = planeHeight * aspect;
+                }
+                
+                // 创建新几何体并替换，保持原始宽高比
+                const newGeometry = new THREE.PlaneGeometry(planeWidth, planeHeight, 160, 160);
+                this.mesh.geometry.dispose();
+                this.mesh.geometry = newGeometry;
+                
+                // 窗口大小改变后，保持当前位置，不自动对齐
+                // 这样用户可以继续使用之前调整好的位置
+            }
         }
     }
 
     bindPointerEvents() {
         if (!this.canvas) return;
+        
+        // 鼠标按下 - 开始拖拽
+        this.canvas.addEventListener('mousedown', (event) => {
+            if (event.button !== 0) return; // 只响应左键
+            this.isDragging = true;
+            this.dragStart = {
+                x: event.clientX,
+                y: event.clientY
+            };
+            // 保存拖拽开始时的mesh位置
+            if (this.mesh) {
+                this.dragStartPosition = {
+                    x: this.mesh.position.x,
+                    y: this.mesh.position.y
+                };
+            }
+            this.canvas.style.cursor = 'grabbing';
+        });
+
+        // 鼠标移动 - 处理拖拽和3D视角效果
         this.canvas.addEventListener('mousemove', (event) => {
-            if (!this.mouse) return;
-            const rect = this.canvas.getBoundingClientRect();
-            const x = (event.clientX - rect.left) / rect.width;
-            const y = (event.clientY - rect.top) / rect.height;
-            this.mouse.set(x * 2 - 1, -(y * 2 - 1));
+            // 如果正在拖拽，更新位置
+            if (this.isDragging && this.dragStart && this.mesh) {
+                const rect = this.canvas.getBoundingClientRect();
+                const deltaX = event.clientX - this.dragStart.x;
+                const deltaY = event.clientY - this.dragStart.y;
+                
+                // 将像素偏移转换为场景单位
+                const fov = this.camera.fov * (Math.PI / 180);
+                const distance = this.camera.position.z;
+                const viewHeight = 2 * distance * Math.tan(fov / 2);
+                const viewWidth = viewHeight * this.getAspect();
+                
+                // 计算场景单位偏移（向右为正，向上为正）
+                const offsetX = (deltaX / rect.width) * viewWidth;
+                const offsetY = -(deltaY / rect.height) * viewHeight; // Y轴反转
+                
+                // 更新mesh位置
+                const newX = this.dragStartPosition.x + offsetX;
+                const newY = this.dragStartPosition.y + offsetY;
+                
+                this.mesh.position.x = newX;
+                this.mesh.position.y = newY;
+                
+                // 更新配置（不再更新推子，已移除Position X/Y推子）
+                this.config.positionX = newX;
+                this.config.positionY = newY;
+            } else if (this.mouse) {
+                // 如果不在拖拽，更新3D视角效果
+                const rect = this.canvas.getBoundingClientRect();
+                const x = (event.clientX - rect.left) / rect.width;
+                const y = (event.clientY - rect.top) / rect.height;
+                this.mouse.set(x * 2 - 1, -(y * 2 - 1));
+            }
         });
 
+        // 鼠标离开 - 重置3D视角
         this.canvas.addEventListener('mouseleave', () => {
-            if (!this.mouse) return;
-            this.mouse.set(0, 0);
+            if (this.mouse) {
+                this.mouse.set(0, 0);
+            }
+            // 如果正在拖拽，结束拖拽
+            if (this.isDragging) {
+                this.isDragging = false;
+                this.canvas.style.cursor = 'grab';
+            }
         });
 
+        // 鼠标释放 - 结束拖拽
+        this.canvas.addEventListener('mouseup', (event) => {
+            if (event.button !== 0) return; // 只响应左键
+            if (this.isDragging) {
+                this.isDragging = false;
+                this.canvas.style.cursor = 'grab';
+            }
+        });
+
+        // 滚轮缩放
         this.canvas.addEventListener('wheel', (event) => {
             event.preventDefault();
             const delta = event.deltaY * 0.0015;
-            this.targetZoom = clamp(this.targetZoom + delta, this.minZoom, this.maxZoom);
+            const newZoom = clamp(this.targetZoom + delta, this.minZoom, this.maxZoom);
+            this.targetZoom = newZoom;
+            this.config.zoom = newZoom;
+            // 同步更新推子
+            const zoomSlider = this.sliders.zoom;
+            if (zoomSlider) {
+                zoomSlider.value = newZoom;
+            }
         }, { passive: false });
-
-        window.addEventListener('resize', () => this.updateRendererSize());
+        
+        // 设置初始光标样式
+        this.canvas.style.cursor = 'grab';
+        
+        // 使用防抖优化窗口大小调整
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                this.updateRendererSize();
+            }, 100);
+        });
     }
 
     loadStarryNightTexture() {
@@ -328,14 +515,30 @@ class StarryNightExperience {
         const attemptLoad = (index) => {
             if (index >= sources.length) {
                 console.error('Unable to load Starry Night texture.');
-                if (this.loadingEl) this.loadingEl.textContent = 'Failed to load image';
+                if (this.loadingEl) {
+                    this.loadingEl.textContent = 'Failed to load image';
+                    // 即使失败也隐藏加载提示，避免一直显示
+                    setTimeout(() => {
+                        if (this.loadingEl) {
+                            this.loadingEl.style.opacity = '0';
+                            setTimeout(() => {
+                                if (this.loadingEl) {
+                                    this.loadingEl.style.display = 'none';
+                                }
+                            }, 600);
+                        }
+                    }, 2000);
+                }
                 return;
             }
             loader.load(
                 sources[index],
                 (texture) => this.onTextureLoaded(texture),
                 undefined,
-                () => attemptLoad(index + 1)
+                (err) => {
+                    console.warn(`Failed to load texture from source ${index}:`, sources[index], err);
+                    attemptLoad(index + 1);
+                }
             );
         };
         attemptLoad(0);
@@ -343,21 +546,50 @@ class StarryNightExperience {
 
     getTextureSources() {
         const sources = [];
-        if (typeof STARRY_NIGHT_B64 !== 'undefined') {
+        // 优先使用本地图片文件
+        sources.push('starry-night.jpg');
+        // 然后尝试 base64 数据（如果可用）
+        if (typeof STARRY_NIGHT_B64 !== 'undefined' && STARRY_NIGHT_B64) {
             sources.push(STARRY_NIGHT_B64);
         }
-        sources.push('starry-night.jpg');
+        // 最后使用网络备用图片
         sources.push('https://upload.wikimedia.org/wikipedia/commons/thumb/e/ea/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg/1280px-Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg');
         return sources;
     }
 
     onTextureLoaded(texture) {
+        // 立即隐藏加载提示，参考提供的代码
+        if (this.loadingEl) {
+            this.loadingEl.style.opacity = '0';
+        }
+
         texture.colorSpace = THREE.SRGBColorSpace;
         texture.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
 
         const aspect = texture.image.width / texture.image.height;
-        const planeWidth = 3.2;
-        const planeHeight = planeWidth / aspect;
+        // 保存图片的原始宽高比，用于后续等比例缩放
+        this.imageAspect = aspect;
+        
+        // 计算相机的视野尺寸
+        const fov = this.camera.fov * (Math.PI / 180);
+        const distance = this.camera.position.z;
+        const viewHeight = 2 * distance * Math.tan(fov / 2);
+        const viewWidth = viewHeight * this.getAspect();
+        
+        // 根据视野尺寸和图片宽高比，计算合适的画布尺寸
+        // 确保画布完整显示在视野内，保持原始宽高比，等比例缩放
+        // 使用较小的尺寸确保完整显示
+        const scale = 0.475; // 缩小到一半
+        let planeWidth, planeHeight;
+        if (aspect > this.getAspect()) {
+            // 图片更宽，以视野宽度为准，保持原始宽高比
+            planeWidth = viewWidth * scale;
+            planeHeight = planeWidth / aspect;
+        } else {
+            // 图片更高，以视野高度为准，保持原始宽高比
+            planeHeight = viewHeight * scale;
+            planeWidth = planeHeight * aspect;
+        }
 
         const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight, 160, 160);
 
@@ -365,10 +597,10 @@ class StarryNightExperience {
             uTime: { value: 0 },
             uTexture: { value: texture },
             uMouse: { value: new THREE.Vector2(0, 0) },
-            uFlowScale: { value: this.config.flowScale },
+            uFlowScale: { value: 10.0 }, // 固定值，不再通过推子控制
             uFlowStrength: { value: this.config.flowStrength },
             uTwinkleStrength: { value: this.config.twinkleStrength },
-            uWarpStrength: { value: this.config.warpStrength },
+            uWarpStrength: { value: 0.02 }, // 固定值，不再通过推子控制
             uAnimationSpeed: { value: this.config.animationSpeed },
             uResolution: { value: new THREE.Vector2(this.canvas.width, this.canvas.height) }
         };
@@ -382,6 +614,10 @@ class StarryNightExperience {
 
         this.mesh = new THREE.Mesh(geometry, material);
         this.scene.add(this.mesh);
+        
+        // 自动对齐窗口并校验位置
+        this.autoAlignAndValidate();
+        
         this.updateShaderConfig();
         this.hideLoading();
         this.animate();
@@ -397,21 +633,33 @@ class StarryNightExperience {
         this.targetMouse.lerp(this.mouse, 0.08);
         this.uniforms.uMouse.value.lerp(this.targetMouse, 0.2);
 
-        this.mesh.rotation.x += (this.targetMouse.y * this.config.tiltStrength - this.mesh.rotation.x) * damp;
-        this.mesh.rotation.y += (this.targetMouse.x * this.config.tiltStrength - this.mesh.rotation.y) * damp;
+        // 禁用倾斜效果，保持mesh旋转为0
+        this.mesh.rotation.x = 0;
+        this.mesh.rotation.y = 0;
+        this.mesh.rotation.z = 0;
 
-        this.camera.position.x += (this.targetMouse.x * 0.35 - this.camera.position.x) * 0.04;
-        this.camera.position.y += (-this.targetMouse.y * 0.35 - this.camera.position.y) * 0.04;
+        // 位置推子直接移动mesh的位置（真正的2D位置移动）
+        this.mesh.position.x = this.config.positionX;
+        this.mesh.position.y = this.config.positionY;
+        this.mesh.position.z = 0;
+
+        // 鼠标交互产生3D视角效果（通过相机位置微调）
+        const mouseOffsetX = this.targetMouse.x * 0.35;
+        const mouseOffsetY = -this.targetMouse.y * 0.35;
+        
+        this.camera.position.x += (mouseOffsetX - this.camera.position.x) * 0.04;
+        this.camera.position.y += (mouseOffsetY - this.camera.position.y) * 0.04;
         this.camera.position.z += (this.targetZoom - this.camera.position.z) * 0.06;
-        this.camera.lookAt(this.scene.position);
+        
+        // 相机始终看向场景中心 (0, 0, 0)
+        this.camera.lookAt(0, 0, 0);
 
         this.renderer.render(this.scene, this.camera);
     }
 
     updateShaderConfig() {
         if (!this.uniforms) return;
-        this.uniforms.uWarpStrength.value = this.config.warpStrength;
-        this.uniforms.uFlowScale.value = this.config.flowScale;
+        this.uniforms.uFlowStrength.value = this.config.flowStrength;
         this.uniforms.uTwinkleStrength.value = this.config.twinkleStrength;
         this.uniforms.uAnimationSpeed.value = this.config.animationSpeed;
     }
@@ -432,14 +680,50 @@ class StarryNightExperience {
     }
 
     randomizeSliders() {
+        // 排除这些推子：zoom
+        const excludedIds = ['zoom'];
+        
+        // 需要特殊处理的推子（±20%范围）
+        const limitedRangeSliders = ['brightness', 'contrast', 'saturation'];
+        
         Object.values(this.sliders).forEach((slider) => {
             if (!slider) return;
-            const min = Number(slider.min || slider.getAttribute('min') || 0);
-            const max = Number(slider.max || slider.getAttribute('max') || 1);
-            const randomValue = Math.random() * (max - min) + min;
+            const sliderId = slider.id;
+            
+            // 跳过被排除的推子
+            if (excludedIds.includes(sliderId)) return;
+            
+            let randomValue;
+            
+            // 对于 brightness、contrast、saturation，使用默认值的 ±20% 范围
+            if (limitedRangeSliders.includes(sliderId)) {
+                const defaultValue = DEFAULT_SLIDERS[sliderId];
+                const range = defaultValue * 0.2; // 20% 范围
+                const minValue = Math.max(
+                    defaultValue - range,
+                    Number(slider.min || slider.getAttribute('min') || 0)
+                );
+                const maxValue = Math.min(
+                    defaultValue + range,
+                    Number(slider.max || slider.getAttribute('max') || 1)
+                );
+                randomValue = Math.random() * (maxValue - minValue) + minValue;
+            } else {
+                // 其他推子使用完整范围
+                const min = Number(slider.min || slider.getAttribute('min') || 0);
+                const max = Number(slider.max || slider.getAttribute('max') || 1);
+                randomValue = Math.random() * (max - min) + min;
+            }
+            
             slider.value = valueWithStep(slider, randomValue);
             slider.dispatchEvent(new Event('input'));
+            // 更新显示值
+            if (sliderId) {
+                this.updateSliderValueDisplay(sliderId);
+            }
         });
+        
+        // 应用画布滤镜（brightness/contrast/saturation 可能已改变）
         this.applyCanvasFilters();
     }
 
@@ -450,6 +734,11 @@ class StarryNightExperience {
             if (typeof defaultValue === 'undefined') return;
             slider.value = defaultValue;
             slider.dispatchEvent(new Event('input'));
+            // 更新显示值
+            const sliderId = slider.id;
+            if (sliderId) {
+                this.updateSliderValueDisplay(sliderId);
+            }
         });
         this.applyCanvasFilters();
     }
@@ -457,9 +746,28 @@ class StarryNightExperience {
     resetView() {
         if (this.mouse) this.mouse.set(0, 0);
         if (this.targetMouse) this.targetMouse.set(0, 0);
-        this.targetZoom = 2.6;
+        this.targetZoom = DEFAULT_SLIDERS.zoom;
+        this.config.zoom = DEFAULT_SLIDERS.zoom;
+        this.config.positionX = DEFAULT_SLIDERS.positionX;
+        this.config.positionY = DEFAULT_SLIDERS.positionY;
+        // 同步更新推子
+        const zoomSlider = this.sliders.zoom;
+        if (zoomSlider) {
+            zoomSlider.value = DEFAULT_SLIDERS.zoom;
+            this.updateSliderValueDisplay('zoom');
+        }
+        // Position X/Y推子已移除，不再更新
         if (this.mesh) {
             this.mesh.rotation.set(0, 0, 0);
+            // 重置mesh位置到中心
+            this.mesh.position.set(0, 0, 0);
+        }
+        if (this.camera) {
+            // 重置相机位置到中心，只保留缩放
+            this.camera.position.x = 0;
+            this.camera.position.y = 0;
+            this.camera.position.z = this.targetZoom;
+            this.camera.lookAt(0, 0, 0);
         }
     }
 
@@ -467,9 +775,19 @@ class StarryNightExperience {
         const container = document.querySelector('.canvas-container');
         if (!container) return;
         if (!document.fullscreenElement) {
-            container.requestFullscreen?.();
+            container.requestFullscreen?.().then(() => {
+                // 全屏后更新画布尺寸，确保按比例缩放
+                setTimeout(() => {
+                    this.updateRendererSize();
+                }, 100);
+            });
         } else {
-            document.exitFullscreen?.();
+            document.exitFullscreen?.().then(() => {
+                // 退出全屏后更新画布尺寸
+                setTimeout(() => {
+                    this.updateRendererSize();
+                }, 100);
+            });
         }
     }
 
@@ -484,16 +802,46 @@ class StarryNightExperience {
     }
 }
 
+// 全局启动函数，由 HTML 中的脚本调用
 const startExperience = () => {
-    if (typeof THREE === 'undefined') {
-        window.addEventListener('load', () => new StarryNightExperience());
+    // 防止重复启动
+    if (window.experienceStarted) {
+        console.log('Experience already started');
         return;
     }
+    
+    // 确保 Three.js 已加载
+    if (typeof THREE === 'undefined') {
+        console.warn('Three.js not loaded yet, waiting...');
+        const loadingEl = document.getElementById('canvas-loading');
+        if (loadingEl) {
+            loadingEl.textContent = '正在加载 Three.js...';
+        }
+        
+        let attempts = 0;
+        const maxAttempts = 100; // 最多等待 5 秒 (100 * 50ms)
+        
+        const checkThree = setInterval(() => {
+            attempts++;
+            if (typeof THREE !== 'undefined') {
+                clearInterval(checkThree);
+                console.log('Three.js loaded successfully');
+                window.experienceStarted = true;
+                new StarryNightExperience();
+            } else if (attempts >= maxAttempts) {
+                clearInterval(checkThree);
+                console.error('Three.js failed to load after timeout');
+                if (loadingEl) {
+                    loadingEl.textContent = 'Three.js 加载失败，请刷新页面重试';
+                }
+            }
+        }, 50);
+        
+        return;
+    }
+    
+    // Three.js 已加载，直接启动
+    console.log('Starting Starry Night Experience');
+    window.experienceStarted = true;
     new StarryNightExperience();
 };
-
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', startExperience);
-} else {
-    startExperience();
-}
