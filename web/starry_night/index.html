@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="Interactive particle flow simulation of Van Gogh's Starry Night">
+    <title>Van Gogh's Starry Night - Interactive Experience</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    
+    <div class="main-container">
+        <!-- Left Sidebar -->
+        <div class="sidebar" id="sidebar">
+            <button class="sidebar-close-btn" id="sidebarClose" title="Close Menu">
+                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+            </button>
+            <div class="header">
+                <h2>The Starry Night</h2>
+            </div>
+
+            <div class="sidebar-header">
+                <div class="tribute">
+                    <p>A tribute to Vincent van Gogh's masterpiece</p>
+                </div>
+                <div class="action-buttons-row">
+                    <button id="btnRandom" class="action-btn-small">
+                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8" cy="8" r="1.5"></circle><circle cx="16" cy="8" r="1.5"></circle><circle cx="8" cy="16" r="1.5"></circle><circle cx="16" cy="16" r="1.5"></circle><circle cx="12" cy="12" r="1.5"></circle></svg>
+                        <span class="btn-label">Random</span>
+                    </button>
+                    <button id="btnResetParams" class="action-btn-small">
+                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+                        <span class="btn-label">Reset</span>
+                    </button>
+                    <button id="btnReset" class="action-btn-small" title="Reset View">
+                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                        <span class="btn-label">View</span>
+                    </button>
+                    <button id="btnFullscreen" class="action-btn-small">
+                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+                        <span class="btn-label">Full</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="controls">
+                <div class="control-group">
+                    <label>Particle Blur</label>
+                    <div class="slider-wrapper">
+                        <input type="range" id="blurLevel" min="0" max="10" step="1" value="5">
+                        <div class="slider-center-marker"></div>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>Particle Opacity</label>
+                    <div class="slider-wrapper">
+                        <input type="range" id="opacity" min="0.0" max="0.8" step="0.05" value="0.4">
+                        <div class="slider-center-marker"></div>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>Particle Count</label>
+                    <div class="slider-wrapper">
+                        <input type="range" id="particleCount" min="1600" max="4000" step="100" value="2800">
+                        <div class="slider-center-marker"></div>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>Particle Speed</label>
+                    <div class="slider-wrapper">
+                        <input type="range" id="speed" min="0.6" max="2.0" step="0.1" value="1.3">
+                        <div class="slider-center-marker"></div>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>Trail Length</label>
+                    <div class="slider-wrapper">
+                        <input type="range" id="trailFade" min="0.05" max="0.15" step="0.005" value="0.1">
+                        <div class="slider-center-marker"></div>
+                    </div>
+                </div>
+
+                <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 10px 0;">
+
+                <div class="control-group">
+                    <label>Background Brightness</label>
+                    <div class="slider-wrapper">
+                        <input type="range" id="brightness" min="0.4" max="2.0" step="0.1" value="1.2">
+                        <div class="slider-center-marker"></div>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>Background Contrast</label>
+                    <div class="slider-wrapper">
+                        <input type="range" id="contrast" min="0.6" max="2.0" step="0.1" value="1.3">
+                        <div class="slider-center-marker"></div>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>Background Saturation</label>
+                    <div class="slider-wrapper">
+                        <input type="range" id="saturation" min="0.0" max="2.8" step="0.1" value="1.4">
+                        <div class="slider-center-marker"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="footer">
+                <div id="fps">Merry Christmas & Happy New Year!</div>
+                <div class="credits">
+                    <div class="credit-line">By <strong>DJzoom</strong> 加菲众</div>
+                    <div class="credit-links">
+                        <a href="https://x.com/DJWZ" target="_blank" rel="noopener noreferrer">X (Twitter)</a>
+                        <span class="separator">•</span>
+                        <a href="https://github.com/djzoom/" target="_blank" rel="noopener noreferrer">GitHub</a>
+                        <span class="separator">•</span>
+                        <a href="https://github.com/djzoom/starry-night-flow" target="_blank" rel="noopener noreferrer">Project</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Content -->
+        <div class="canvas-container">
+            <div id="canvas-loading">正在加载星空...</div>
+            <canvas id="canvas"></canvas>
+        </div>
+        
+        <!-- Sidebar Toggle Button -->
+        <button class="sidebar-toggle" id="sidebarToggle" title="Toggle Menu">
+            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7"></path>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Load scripts in correct order -->
+    <script src="image_data.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r152/three.min.js" defer></script>
+    <script src="script.js" defer></script>
+</body>
+</html>
