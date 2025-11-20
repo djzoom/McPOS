@@ -247,7 +247,6 @@ html, body {
 .header {
     margin-bottom: 20px;
     padding-bottom: 12px;
-    border-bottom: 1px solid var(--border-color);
     text-align: center;
 }
 
@@ -268,7 +267,6 @@ html, body {
 .sidebar-header {
     margin-bottom: 20px;
     padding-bottom: 15px;
-    border-bottom: 1px solid var(--border-color);
 }
 
 .sidebar-header .wikipedia-link {
@@ -357,6 +355,16 @@ html, body {
     font-weight: 500;
     letter-spacing: 0.3px;
     text-transform: uppercase;
+}
+
+.slider-value-display {
+    font-size: 0.55rem;
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    font-family: 'Courier New', monospace;
+    margin-left: 4px;
 }
 
 .slider-value {
