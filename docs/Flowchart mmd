@@ -1,0 +1,5 @@
+Flowchart mmd
+    A[Step 1: Load all flashcards] --> B[Step 2: Pick one card at random]
+    B --> C[Step 3: Show the Thai word first]
+    C --> D[Step 4: Wait for Enter to show the meaning]
+    D --> E[Step 5: Pick another card and repeat]
