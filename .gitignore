@@ -6,8 +6,10 @@ __pycache__/
 
 # Environments
 .venv/
-env/
+.venv311/
 venv/
+venv311/
+env/
 路径按实际安装位置调整/
 
 # Editors
@@ -81,7 +83,28 @@ config/api_config.json
 *.bak
 *.swp
 *~
-.cursor/plans/
+.cursor/
+.cursor_sync/
+.herewego-chrome-profile/
+
+# Logs
+logs/
+*.log
+*.pid
+
+# Cursor-specific
+.cursor/
+.cursor_sync/
+
+# Project-specific generated/runtime files
+channels/*/output/
+channels/*/data/
+*.db
+*.sqlite3
+*.sqlite
+data/*.json
+!data/metrics.json
+data/google_sheet/
 
 # Package files (should be regenerated, not committed)
 *.tar.gz
@@ -89,3 +112,6 @@ config/api_config.json
 
 # Icon generation temporary files
 *.iconset
+
+#/  # 废弃的虚拟环境目录
+desktop/  # Tauri 构建产物（如果不再使用可删除）
