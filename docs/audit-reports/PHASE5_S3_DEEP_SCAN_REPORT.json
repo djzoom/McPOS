@@ -1,0 +1,238 @@
+{
+  "scan_metadata": {
+    "phase": "Phase 5-S3 Deep Dead Code Scan",
+    "timestamp": "2025-11-16",
+    "scan_directories": [
+      "kat_rec_web/backend/t2r/services/",
+      "kat_rec_web/backend/t2r/utils/",
+      "kat_rec_web/backend/t2r/plugins/",
+      "kat_rec_web/backend/t2r/scripts/",
+      "kat_rec_web/frontend/legacy/",
+      "kat_rec_web/frontend/utils/",
+      "kat_rec_web/frontend/hooks/"
+    ]
+  },
+  "scan_summary": {
+    "total_files_scanned": 84,
+    "delete_candidates": 15,
+    "legacy_move_candidates": 0,
+    "retain_list": 69,
+    "risk_files": 1
+  },
+  "DELETE_CANDIDATES": [
+    {
+      "file_path": "kat_rec_web/backend/t2r/services/pipeline_engine.py",
+      "module_name": "backend.t2r.services.pipeline_engine",
+      "file_name": "pipeline_engine.py",
+      "import_count": 0,
+      "actual_usage_count": 1,
+      "usage_files": ["backend/t2r/tests/test_pipeline_engine.py"],
+      "category": "A",
+      "reason": "Only used in test file. Pipeline engine was planned but never integrated into Stateflow V4.",
+      "protected": false,
+      "part_of_stateflow_v4": false,
+      "justification": "Pipeline engine was designed for YAML-based workflow but never integrated. Stateflow V4 uses direct file_detect.py and automation flows. Test file should also be deleted."
+    },
+    {
+      "file_path": "kat_rec_web/backend/t2r/services/episode_metadata_registry.py",
+      "module_name": "backend.t2r.services.episode_metadata_registry",
+      "file_name": "episode_metadata_registry.py",
+      "import_count": 0,
+      "actual_usage_count": 0,
+      "usage_files": [],
+      "category": "A",
+      "reason": "Zero imports and zero usage - dead code. EMR was replaced by file_detect.py in Stateflow V4. Only referenced in reset_event_tables.py for database filename, not actual import.",
+      "protected": false,
+      "part_of_stateflow_v4": false,
+      "justification": "Episode Metadata Registry was a transitional module. Stateflow V4 uses file_detect.py for all asset state detection. Database file reference in reset_event_tables.py is just a filename string, not an import."
+    },
+    {
+      "file_path": "kat_rec_web/backend/t2r/services/episode_flow_helper.py",
+      "module_name": "backend.t2r.services.episode_flow_helper",
+      "file_name": "episode_flow_helper.py",
+      "import_count": 0,
+      "actual_usage_count": 0,
+      "category": "A",
+      "reason": "Zero imports and zero usage - dead code. Helper functions not used anywhere.",
+      "protected": false,
+      "part_of_stateflow_v4": false,
+      "justification": "Episode flow helper functions were replaced by episode_flow_adapters.py in Stateflow V4."
+    },
+    {
+      "file_path": "kat_rec_web/backend/t2r/services/dynamic_semaphore.py",
+      "module_name": "backend.t2r.services.dynamic_semaphore",
+      "file_name": "dynamic_semaphore.py",
+      "import_count": 0,
+      "actual_usage_count": 0,
+      "category": "A",
+      "reason": "Zero imports and zero usage - dead code. Dynamic semaphore not used.",
+      "protected": false,
+      "part_of_stateflow_v4": false,
+      "justification": "Dynamic semaphore was planned for resource management but never integrated."
+    },
+    {
+      "file_path": "kat_rec_web/backend/t2r/services/upload_utils.py",
+      "module_name": "backend.t2r.services.upload_utils",
+      "file_name": "upload_utils.py",
+      "import_count": 0,
+      "actual_usage_count": 0,
+      "category": "A",
+      "reason": "Zero imports and zero usage - dead code. Upload utilities not used.",
+      "protected": false,
+      "part_of_stateflow_v4": false,
+      "justification": "Upload utilities were consolidated into upload_queue.py and upload_verification.py."
+    },
+    {
+      "file_path": "kat_rec_web/backend/t2r/services/api_versioning.py",
+      "module_name": "backend.t2r.services.api_versioning",
+      "file_name": "api_versioning.py",
+      "import_count": 0,
+      "actual_usage_count": 0,
+      "category": "A",
+      "reason": "Zero imports and zero usage - dead code. API versioning not implemented.",
+      "protected": false,
+      "part_of_stateflow_v4": false,
+      "justification": "API versioning service was planned but never implemented or used."
+    },
+    {
+      "file_path": "kat_rec_web/backend/t2r/utils/reliable_file_ops.py",
+      "module_name": "backend.t2r.utils.reliable_file_ops",
+      "file_name": "reliable_file_ops.py",
+      "import_count": 0,
+      "actual_usage_count": 0,
+      "category": "A",
+      "reason": "Zero imports and zero usage - dead code. Replaced by async_file_ops.py.",
+      "protected": false,
+      "part_of_stateflow_v4": false,
+      "justification": "Reliable file operations were replaced by async_file_ops.py which provides better async support."
+    },
+    {
+      "file_path": "kat_rec_web/backend/t2r/utils/config_manager.py",
+      "module_name": "backend.t2r.utils.config_manager",
+      "file_name": "config_manager.py",
+      "import_count": 0,
+      "actual_usage_count": 0,
+      "category": "A",
+      "reason": "Zero imports and zero usage - dead code. Config management not used.",
+      "protected": false,
+      "part_of_stateflow_v4": false,
+      "justification": "Config manager was planned but configuration is handled directly via schedule_service.py."
+    },
+    {
+      "file_path": "kat_rec_web/backend/t2r/utils/ffmpeg_builder.py",
+      "module_name": "backend.t2r.utils.ffmpeg_builder",
+      "file_name": "ffmpeg_builder.py",
+      "import_count": 0,
+      "actual_usage_count": 0,
+      "category": "A",
+      "reason": "Zero imports and zero usage - dead code. FFmpeg builder not used.",
+      "protected": false,
+      "part_of_stateflow_v4": false,
+      "justification": "FFmpeg builder utility was created but FFmpeg commands are built inline in render/remix code."
+    },
+    {
+      "file_path": "kat_rec_web/backend/t2r/utils/atomic_group.py",
+      "module_name": "backend.t2r.utils.atomic_group",
+      "file_name": "atomic_group.py",
+      "import_count": 0,
+      "actual_usage_count": 0,
+      "category": "A",
+      "reason": "Zero imports and zero usage - dead code. Atomic group operations not used.",
+      "protected": false,
+      "part_of_stateflow_v4": false,
+      "justification": "Atomic group operations were planned for batch file operations but never used."
+    },
+    {
+      "file_path": "kat_rec_web/backend/t2r/utils/__init__.py",
+      "module_name": "backend.t2r.utils.__init__",
+      "file_name": "__init__.py",
+      "import_count": 0,
+      "actual_usage_count": 0,
+      "category": "A",
+      "reason": "Empty __init__.py with zero imports - can be deleted if package structure allows.",
+      "protected": false,
+      "part_of_stateflow_v4": false,
+      "justification": "Empty __init__.py file. Python packages can work without explicit __init__.py in Python 3.3+, but keeping it is safer for package structure."
+    },
+    {
+      "file_path": "kat_rec_web/backend/t2r/services/__init__.py",
+      "module_name": "backend.t2r.services.__init__",
+      "file_name": "__init__.py",
+      "import_count": 0,
+      "actual_usage_count": 0,
+      "category": "A",
+      "reason": "Empty __init__.py with zero imports - can be deleted if package structure allows.",
+      "protected": false,
+      "part_of_stateflow_v4": false,
+      "justification": "Empty __init__.py file. Python packages can work without explicit __init__.py in Python 3.3+, but keeping it is safer for package structure."
+    },
+    {
+      "file_path": "kat_rec_web/backend/t2r/plugins/example_action_plugin.py",
+      "module_name": "backend.t2r.plugins.example_action_plugin",
+      "file_name": "example_action_plugin.py",
+      "import_count": 0,
+      "actual_usage_count": 0,
+      "category": "A",
+      "reason": "Example plugin - not used in production, only for demonstration.",
+      "protected": false,
+      "part_of_stateflow_v4": false,
+      "justification": "Example plugin is for documentation/demonstration only. Not used in actual workflows."
+    },
+    {
+      "file_path": "kat_rec_web/backend/t2r/services/task_priority.py",
+      "module_name": "backend.t2r.services.task_priority",
+      "file_name": "task_priority.py",
+      "import_count": 0,
+      "actual_usage_count": 0,
+      "category": "A",
+      "reason": "Zero imports and zero usage - dead code. Task priority system was planned but never integrated.",
+      "protected": false,
+      "part_of_stateflow_v4": false,
+      "justification": "Task priority system was designed for multi-dimensional priority calculation but never integrated into render_queue or upload_queue. Uses setattr/getattr internally but module itself is never imported."
+    },
+    {
+      "file_path": "kat_rec_web/backend/t2r/services/cleanup_service.py",
+      "module_name": "backend.t2r.services.cleanup_service",
+      "file_name": "cleanup_service.py",
+      "import_count": 0,
+      "actual_usage_count": 0,
+      "category": "A",
+      "reason": "Zero imports and zero usage - dead code. Cleanup routes were deleted in Phase 5, service is orphaned.",
+      "protected": false,
+      "part_of_stateflow_v4": false,
+      "justification": "cleanup.py route was deleted in Phase 5 Dead Code Cleanup. cleanup_service.py is now orphaned with no routes using it. Only referenced in validate_no_asr_left.py whitelist (for directory checks)."
+    }
+  ],
+  "LEGACY_MOVE_CANDIDATES": [],
+  "RETAIN_LIST": [
+    {
+      "file_path": "kat_rec_web/backend/t2r/scripts/validate_sqlite_schema.py",
+      "category": "D",
+      "reason": "CLI script - may be called directly via command line.",
+      "action": "Keep as CLI tool - scripts are called directly, not imported",
+      "note": "CLI scripts are executed directly, not imported. This is expected behavior."
+    },
+    {
+      "file_path": "kat_rec_web/backend/t2r/scripts/full_validation.py",
+      "category": "C",
+      "reason": "Protected script - used by CI/CD and governance validation.",
+      "action": "Keep - protected script from governance document",
+      "note": "This script is part of the guardrail system established in Phase 4-P5."
+    }
+  ],
+  "RISK_FILES": [
+    {
+      "file_path": "kat_rec_web/backend/t2r/scripts/validate_sqlite_schema.py",
+      "risk": "CLI script - may be called directly",
+      "recommendation": "Keep if used as CLI tool, otherwise can be deleted.",
+      "verification_needed": true
+    }
+  ],
+  "notes": {
+    "import_count_limitation": "Import count of 0 may be misleading for files that are used via dynamic imports, plugin systems, or direct execution (scripts). Actual usage was verified via codebase search.",
+    "protected_modules": "All files in PROTECTED_MODULES list from governance document are automatically classified as Category C (Retain).",
+    "plugin_system": "Plugins are loaded dynamically by plugin_system.py, so they may show 0 imports but are still used.",
+    "scripts": "CLI scripts are executed directly, not imported, so import_count=0 is expected."
+  }
+}
+

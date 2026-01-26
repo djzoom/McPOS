@@ -1,7 +1,11 @@
 # Documentation Index
 
-**Last Updated**: 2025-11-04  
-**Version**: 1.2.0
+**Last Updated**: 2025-01-XX  
+**Version**: 2.0 (Stateflow V4)
+
+**项目根目录**: `/Users/z/Downloads/Kat_Rec`
+
+**注意**: KR2 目录已废弃，所有文档都在项目根目录的 `docs/` 目录中。
 
 ---
 
@@ -10,44 +14,85 @@
 ### Essential Reading
 
 1. **[README.md](../README.md)** - Project overview, quick start, and usage guide
-2. **[DEVELOPMENT.md](./DEVELOPMENT.md)** - Development log and recent achievements
-3. **[ARCHITECTURE.md](./ARCHITECTURE.md)** - System architecture and design principles
-4. **[ROADMAP.md](./ROADMAP.md)** - Future plans and improvement roadmap
-5. **[PACKAGING.md](./PACKAGING.md)** - Packaging, distribution, and deployment guide
-6. **[CHANGELOG.md](../CHANGELOG.md)** - Version history and changes
+2. **[KAT_REC_GOVERNANCE.md](../KAT_REC_GOVERNANCE.md)** - Governance document (Stateflow V4 rules)
+3. **[01_SYSTEM_OVERVIEW.md](./01_SYSTEM_OVERVIEW.md)** - System architecture (Stateflow V4)
+4. **[02_WORKFLOW_AND_AUTOMATION.md](./02_WORKFLOW_AND_AUTOMATION.md)** - Workflow and automation guide
+5. **[03_DEVELOPMENT_GUIDE.md](./03_DEVELOPMENT_GUIDE.md)** - Development guide
+6. **[04_DEPLOYMENT_AND_ROADMAP.md](./04_DEPLOYMENT_AND_ROADMAP.md)** - Deployment and roadmap
 
 ---
 
-## 📖 Feature Documentation
+## 🏗️ Architecture Documents
 
-### Production & Scheduling
+### Stateflow V4 Architecture
 
-- **[SCHEDULE_MASTER_GUIDE.md](./SCHEDULE_MASTER_GUIDE.md)** - Schedule master usage guide
-- **[PRODUCTION_LOG.md](./PRODUCTION_LOG.md)** - Production log system (⚠️ Deprecated - see [ARCHITECTURE.md](./ARCHITECTURE.md))
-- **[LIBRARY_MANAGEMENT.md](./LIBRARY_MANAGEMENT.md)** - Library management guide
-- **[SCHEDULE_CREATION_WITH_CONFIRMATION.md](./SCHEDULE_CREATION_WITH_CONFIRMATION.md)** - Schedule creation workflow
+- **[01_SYSTEM_OVERVIEW.md](./01_SYSTEM_OVERVIEW.md)** - Complete system overview (Stateflow V4)
+  - File System SSOT principles
+  - Asset detection via `file_detect.py`
+  - Queue system architecture
+  - Plugin system
 
-### Content Creation
+- **[STATEFLOW_V4_COMPLETE_ANALYSIS.md](./STATEFLOW_V4_COMPLETE_ANALYSIS.md)** - Complete Stateflow V4 analysis
+  - Current system status
+  - Development history
+  - Architecture completeness
+  - Missing components
+  - Development plan
 
-- **[cover_layout.md](./cover_layout.md)** - Cover design specifications
-- **[asset_guide.md](./asset_guide.md)** - Asset file guide
-- **[TITLE_GENERATION_ANALYSIS.md](./TITLE_GENERATION_ANALYSIS.md)** - Title generation mechanism
+- **[COMPLETE_STRATEGY_PLAN.md](./COMPLETE_STRATEGY_PLAN.md)** - Complete strategy plan
+  - Technical debt analysis
+  - Performance gaps
+  - Development roadmap
+  - Marketing strategy
+  - Profitability analysis
 
-### Tools & APIs
+### Upload & Verify Pipeline
 
-- **[COMMAND_LINE_WORKFLOW.md](./COMMAND_LINE_WORKFLOW.md)** - Command line workflow
-- **[TERMINAL_GUIDE.md](./TERMINAL_GUIDE.md)** - Interactive terminal guide
-- **[cli_reference.md](./cli_reference.md)** - CLI command reference
-- **[YOUTUBE_UPLOAD_REQUIREMENTS.md](./YOUTUBE_UPLOAD_REQUIREMENTS.md)** - YouTube upload requirements
-- **[YOUTUBE_UPLOAD_GUIDE.md](./YOUTUBE_UPLOAD_GUIDE.md)** - Complete YouTube upload guide
-- **[QUICK_START_YOUTUBE.md](./QUICK_START_YOUTUBE.md)** - Quick start for YouTube integration
+- **[ARCHITECTURE_UPLOAD_V2.md](./ARCHITECTURE_UPLOAD_V2.md)** - Upload pipeline architecture
+- **[ARCHITECTURE_VERIFY_V2.md](./ARCHITECTURE_VERIFY_V2.md)** - Verification pipeline architecture
+- **[LIFECYCLE_UPLOAD_VERIFY.md](./LIFECYCLE_UPLOAD_VERIFY.md)** - Complete upload→verify lifecycle
 
-### Reference & Guides
+---
 
-- **[SCHEDULE_CREATION_WITH_CONFIRMATION.md](./SCHEDULE_CREATION_WITH_CONFIRMATION.md)** - Schedule creation workflow
-- **[TITLE_GENERATION_ANALYSIS.md](./TITLE_GENERATION_ANALYSIS.md)** - Title generation mechanism
-- **[asset_guide.md](./asset_guide.md)** - Asset files guide
-- **[cover_layout.md](./cover_layout.md)** - Cover layout specifications
+## 📋 Channel Docs
+
+- **Run Baby Run (RBR)**: 频道专用资料集中在 `channels/rbr/docs/`（流程、BPM标准化、Persona 渲染设计）
+
+---
+
+## 📋 Phase Reports
+
+Phase execution reports are stored in **[phase-reports/](./phase-reports/)**:
+
+- **Phase 4 Reports**: ASR removal, structure cleanup
+- **Phase 5 Reports**: Cleanup, dead code removal, API contract review, plugin audit, queue stability, documentation sync
+
+---
+
+## 🔧 Development & Troubleshooting
+
+- **[TROUBLESHOOTING_BACKEND.md](./TROUBLESHOOTING_BACKEND.md)** - Backend troubleshooting guide
+- **[BACKEND_STARTUP_OPTIMIZATION.md](./BACKEND_STARTUP_OPTIMIZATION.md)** - Backend startup optimization
+- **[PORT_MANAGEMENT.md](./PORT_MANAGEMENT.md)** - Port management guide
+- **[websocket_quick_test.md](./websocket_quick_test.md)** - WebSocket testing guide
+- **[ATLAS_CONSOLE_DEBUG_GUIDE.md](./ATLAS_CONSOLE_DEBUG_GUIDE.md)** - Atlas console debugging
+- **[VIBE_CODING_ATLAS_DEBUGGING_EXTENSION.md](./VIBE_CODING_ATLAS_DEBUGGING_EXTENSION.md)** - Vibe coding debugging
+
+---
+
+## 🎨 UI & Frontend
+
+- **[FRAMER_MOTION_INTEGRATION_V1.md](./FRAMER_MOTION_INTEGRATION_V1.md)** - Framer Motion integration
+- **[FILE_GENERATION_GUIDE.md](./FILE_GENERATION_GUIDE.md)** - File generation guide
+- **[APP_LAUNCHER.md](./APP_LAUNCHER.md)** - App launcher guide
+- **[ADD_ICON.md](./ADD_ICON.md)** - Adding app icons
+- **[TAURI_APP.md](./TAURI_APP.md)** - Tauri app documentation
+
+---
+
+## 🤝 Collaboration
+
+- **[AgentCollaborationRulesV1.md](./AgentCollaborationRulesV1.md)** - Agent collaboration rules
 
 ---
 
@@ -57,32 +102,35 @@ Historical documents and archived content are stored in **[archive/](./archive/)
 
 - Phase IV completion summaries
 - System health reports
-- Chinese language documents (migrated)
 - Historical development notes
+- Deprecated architecture documents
+- Episode-specific fix reports
+- Grid progress implementation history
+- Render/upload workflow analysis
+- OLD_WORLD 文档已归档至 `archive/old_world/`
 
 ---
 
 ## 🔍 Quick Reference
 
 **Want to get started?**
-→ [README.md](../README.md) → [DEVELOPMENT.md](./DEVELOPMENT.md)
+→ [README.md](../README.md) → [01_SYSTEM_OVERVIEW.md](./01_SYSTEM_OVERVIEW.md)
 
-**Want to understand the architecture?**
-→ [ARCHITECTURE.md](./ARCHITECTURE.md)
+**Want to understand Stateflow V4?**
+→ [01_SYSTEM_OVERVIEW.md](./01_SYSTEM_OVERVIEW.md) → [KAT_REC_GOVERNANCE.md](../KAT_REC_GOVERNANCE.md)
 
-**Want to see future plans?**
-→ [ROADMAP.md](./ROADMAP.md)
+**Working on RBR (McPOS 2nd channel)?**
+→ `channels/rbr/docs/` (workflow / BPM 标准化 / Persona 渲染设计)
 
-**Want to use the schedule system?**
-→ [SCHEDULE_MASTER_GUIDE.md](./SCHEDULE_MASTER_GUIDE.md)
+**Want to see Phase progress?**
+→ [phase-reports/](./phase-reports/)
 
-**Want to upload to YouTube?**
-→ [YOUTUBE_UPLOAD_GUIDE.md](./YOUTUBE_UPLOAD_GUIDE.md) or [QUICK_START_YOUTUBE.md](./QUICK_START_YOUTUBE.md)
+**Want to troubleshoot?**
+→ [TROUBLESHOOTING_BACKEND.md](./TROUBLESHOOTING_BACKEND.md)
 
-**Want to package and distribute?**
-→ [PACKAGING.md](./PACKAGING.md)
+**Want to understand upload/verify?**
+→ [ARCHITECTURE_UPLOAD_V2.md](./ARCHITECTURE_UPLOAD_V2.md) → [ARCHITECTURE_VERIFY_V2.md](./ARCHITECTURE_VERIFY_V2.md)
 
 ---
 
-**Documentation Structure**: English file names only, Chinese documents archived.
-
+**Documentation Structure**: Organized by category, historical documents archived.
