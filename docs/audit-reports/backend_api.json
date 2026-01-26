@@ -1,0 +1,26 @@
+Error parsing kat_rec_web/backend/routes/sync.py: 'kat_rec_web/backend/routes/sync.py' is not in the subpath of '/Users/z/Downloads/Kat_Rec' OR one path is relative and the other is absolute.
+Error parsing kat_rec_web/backend/routes/library.py: 'kat_rec_web/backend/routes/library.py' is not in the subpath of '/Users/z/Downloads/Kat_Rec' OR one path is relative and the other is absolute.
+Error parsing kat_rec_web/backend/routes/upload.py: 'kat_rec_web/backend/routes/upload.py' is not in the subpath of '/Users/z/Downloads/Kat_Rec' OR one path is relative and the other is absolute.
+Error parsing kat_rec_web/backend/routes/control.py: 'kat_rec_web/backend/routes/control.py' is not in the subpath of '/Users/z/Downloads/Kat_Rec' OR one path is relative and the other is absolute.
+Error parsing kat_rec_web/backend/routes/trash.py: 'kat_rec_web/backend/routes/trash.py' is not in the subpath of '/Users/z/Downloads/Kat_Rec' OR one path is relative and the other is absolute.
+Error parsing kat_rec_web/backend/routes/static.py: 'kat_rec_web/backend/routes/static.py' is not in the subpath of '/Users/z/Downloads/Kat_Rec' OR one path is relative and the other is absolute.
+Error parsing kat_rec_web/backend/routes/channels.py: 'kat_rec_web/backend/routes/channels.py' is not in the subpath of '/Users/z/Downloads/Kat_Rec' OR one path is relative and the other is absolute.
+Error parsing kat_rec_web/backend/routes/library_v2.py: 'kat_rec_web/backend/routes/library_v2.py' is not in the subpath of '/Users/z/Downloads/Kat_Rec' OR one path is relative and the other is absolute.
+Error parsing kat_rec_web/backend/routes/status.py: 'kat_rec_web/backend/routes/status.py' is not in the subpath of '/Users/z/Downloads/Kat_Rec' OR one path is relative and the other is absolute.
+Error parsing kat_rec_web/backend/routes/mock.py: 'kat_rec_web/backend/routes/mock.py' is not in the subpath of '/Users/z/Downloads/Kat_Rec' OR one path is relative and the other is absolute.
+Error parsing kat_rec_web/backend/t2r/routes/metrics.py: 'kat_rec_web/backend/t2r/routes/metrics.py' is not in the subpath of '/Users/z/Downloads/Kat_Rec' OR one path is relative and the other is absolute.
+Error parsing kat_rec_web/backend/t2r/routes/plan.py: 'kat_rec_web/backend/t2r/routes/plan.py' is not in the subpath of '/Users/z/Downloads/Kat_Rec' OR one path is relative and the other is absolute.
+Error parsing kat_rec_web/backend/t2r/routes/audit.py: 'kat_rec_web/backend/t2r/routes/audit.py' is not in the subpath of '/Users/z/Downloads/Kat_Rec' OR one path is relative and the other is absolute.
+Error parsing kat_rec_web/backend/t2r/routes/upload.py: 'kat_rec_web/backend/t2r/routes/upload.py' is not in the subpath of '/Users/z/Downloads/Kat_Rec' OR one path is relative and the other is absolute.
+Error parsing kat_rec_web/backend/t2r/routes/automation.py: 'kat_rec_web/backend/t2r/routes/automation.py' is not in the subpath of '/Users/z/Downloads/Kat_Rec' OR one path is relative and the other is absolute.
+Error parsing kat_rec_web/backend/t2r/routes/reset.py: 'kat_rec_web/backend/t2r/routes/reset.py' is not in the subpath of '/Users/z/Downloads/Kat_Rec' OR one path is relative and the other is absolute.
+Error parsing kat_rec_web/backend/t2r/routes/desc.py: 'kat_rec_web/backend/t2r/routes/desc.py' is not in the subpath of '/Users/z/Downloads/Kat_Rec' OR one path is relative and the other is absolute.
+Error parsing kat_rec_web/backend/t2r/routes/scan.py: 'kat_rec_web/backend/t2r/routes/scan.py' is not in the subpath of '/Users/z/Downloads/Kat_Rec' OR one path is relative and the other is absolute.
+Error parsing kat_rec_web/backend/t2r/routes/episodes.py: 'kat_rec_web/backend/t2r/routes/episodes.py' is not in the subpath of '/Users/z/Downloads/Kat_Rec' OR one path is relative and the other is absolute.
+Error parsing kat_rec_web/backend/t2r/routes/schedule.py: 'kat_rec_web/backend/t2r/routes/schedule.py' is not in the subpath of '/Users/z/Downloads/Kat_Rec' OR one path is relative and the other is absolute.
+Error parsing kat_rec_web/backend/t2r/routes/episode_flow.py: 'kat_rec_web/backend/t2r/routes/episode_flow.py' is not in the subpath of '/Users/z/Downloads/Kat_Rec' OR one path is relative and the other is absolute.
+Error parsing kat_rec_web/backend/t2r/routes/srt.py: 'kat_rec_web/backend/t2r/routes/srt.py' is not in the subpath of '/Users/z/Downloads/Kat_Rec' OR one path is relative and the other is absolute.
+{
+  "total_routes": 0,
+  "routes": []
+}
