@@ -27,7 +27,8 @@ sys.path.insert(0, str(REPO_ROOT))
 
 try:
     from schedule_master import ScheduleMaster
-    from episode_state_manager import EpisodeStateManager
+    # ⚠️ REMOVED: episode_state_manager import (Stateflow V4)
+    # EpisodeStateManager removed - use ScheduleMaster and file_detect.py instead
     # 注意：production_log导入用于重建production_log.json（向后兼容）
     # 新架构以schedule_master.json为单一数据源，production_log.json仅用于兼容旧工具
     from production_log import ProductionLog, LibrarySnapshot
@@ -94,27 +95,12 @@ def sync_schedule_from_filesystem(dry_run: bool = False) -> Dict:
     Returns:
         同步统计
     """
-    schedule = ScheduleMaster.load()
-    if not schedule:
-        print("❌ 排播表不存在")
-        return {"synced": 0, "errors": 0}
-    
-    output_dir = REPO_ROOT / "output"
-    state_manager = EpisodeStateManager()
-    
-    stats = state_manager.sync_from_filesystem(output_dir, auto_fix=not dry_run)
-    
-    print(f"\n📊 同步结果：")
-    print(f"  ✅ 状态已同步: {stats['synced']} 期")
-    print(f"  ⚠️  需要修正: {stats['errors']} 期")
-    if stats["updated"]:
-        print(f"  📝 已更新状态: {len(stats['updated'])} 期")
-    if stats["rolled_back"]:
-        print(f"  🔄 已回滚状态: {len(stats['rolled_back'])} 期")
-        for item in stats["rolled_back"][:5]:
-            print(f"    - {item['id']}: 缺失 {', '.join(item['missing'])}")
-    
-    return stats
+    print("⚠️  此功能已弃用（Stateflow V4）")
+    print("   EpisodeStateManager 已移除，请使用统一的文件检测 API 替代：")
+    print("   - Backend: /api/t2r/episodes/{episode_id}/assets")
+    print("   - Frontend: useEpisodeAssets() hook")
+    print("   - 文件系统是单一数据源（SSOT）")
+    return {"synced": 0, "errors": 0, "updated": [], "rolled_back": []}
 
 
 def rebuild_production_log_from_filesystem(dry_run: bool = False) -> Dict:

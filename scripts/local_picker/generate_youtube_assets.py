@@ -43,7 +43,52 @@ def parse_timestamp(ts: str) -> tuple[int, int, int, int]:
 
 
 def format_srt_time(hours: int, minutes: int, seconds: int, milliseconds: int) -> str:
-    """格式化为 SRT 时间格式：HH:MM:SS,mmm"""
+    """
+    格式化为 SRT 时间格式：HH:MM:SS,mmm
+    
+    ✅ Fix: 确保分钟和秒不超过 59，如果超过则正确进位到小时
+    
+    重要：SRT格式要求分钟和秒的最大值是59，不允许61:03,000这样的格式
+    """
+    # ✅ Fix: 规范化时间值，确保分钟和秒不超过 59
+    # 先处理毫秒的进位
+    if milliseconds >= 1000:
+        seconds += milliseconds // 1000
+        milliseconds = milliseconds % 1000
+    
+    # 处理秒的进位（可能因为毫秒进位而超过60）
+    if seconds >= 60:
+        minutes += seconds // 60
+        seconds = seconds % 60
+    
+    # 处理分钟的进位（可能因为秒进位而超过60）
+    if minutes >= 60:
+        hours += minutes // 60
+        minutes = minutes % 60
+    
+    # 确保所有值都在有效范围内
+    # 再次检查，防止边界情况
+    if seconds >= 60:
+        minutes += seconds // 60
+        seconds = seconds % 60
+    if minutes >= 60:
+        hours += minutes // 60
+        minutes = minutes % 60
+    if milliseconds >= 1000:
+        seconds += milliseconds // 1000
+        milliseconds = milliseconds % 1000
+        if seconds >= 60:
+            minutes += seconds // 60
+            seconds = seconds % 60
+        if minutes >= 60:
+            hours += minutes // 60
+            minutes = minutes % 60
+    
+    # 最终验证：确保分钟和秒不超过59
+    assert 0 <= minutes <= 59, f"Minutes must be 0-59, got {minutes}"
+    assert 0 <= seconds <= 59, f"Seconds must be 0-59, got {seconds}"
+    assert 0 <= milliseconds <= 999, f"Milliseconds must be 0-999, got {milliseconds}"
+    
     return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
 
 
@@ -194,11 +239,21 @@ def generate_srt(
             end_time = (next_h, next_m, next_s, next_ms)
         else:
             # 最后一个曲目，持续时间3秒
+            # ✅ Fix: 规范化时间计算，确保分钟和秒不超过 59
             end_seconds = s + 3
-            end_minutes = m + (end_seconds // 60)
-            end_seconds = end_seconds % 60
-            end_hours = h + (end_minutes // 60)
-            end_minutes = end_minutes % 60
+            end_minutes = m
+            end_hours = h
+            
+            # 处理秒的进位
+            if end_seconds >= 60:
+                end_minutes += end_seconds // 60
+                end_seconds = end_seconds % 60
+            
+            # 处理分钟的进位
+            if end_minutes >= 60:
+                end_hours += end_minutes // 60
+                end_minutes = end_minutes % 60
+            
             end_time = (end_hours, end_minutes, end_seconds, 0)
         
         # 生成曲目介绍
