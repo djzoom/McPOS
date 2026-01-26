@@ -28,7 +28,10 @@ except ImportError:
     sys.exit(1)
 
 # OAuth 2.0 配置
-SCOPES = ['https://www.googleapis.com/auth/youtube.upload']
+SCOPES = [
+    'https://www.googleapis.com/auth/youtube.upload',
+    'https://www.googleapis.com/auth/youtube.force-ssl',
+]
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 CLIENT_SECRETS_FILE = REPO_ROOT / "config" / "google" / "client_secrets.json"
 TOKEN_FILE = REPO_ROOT / "config" / "google" / "youtube_token.json"
@@ -75,7 +78,7 @@ def get_credentials() -> Optional[Credentials]:
                 print("✅ Token已刷新")
             except Exception as e:
                 print(f"⚠️  Token刷新失败: {e}")
-                print("💡 需要重新授权，请运行: python scripts/local_picker/youtube_upload.py --setup")
+                print("💡 需要重新授权，请运行: python scripts/uploader/upload_to_youtube.py --setup")
                 creds = None
         else:
             creds = None
