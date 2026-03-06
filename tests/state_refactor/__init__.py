@@ -1,2 +1,0 @@
-# State Refactor Test Suite
-

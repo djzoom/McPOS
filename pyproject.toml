@@ -4,22 +4,93 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kat-rec"
-version = "1.2.0"
+version = "0.9.9"
 description = "Kat Records Studio - Automated Lo-Fi music mixtape generation system with album covers, audio mixing, and 4K video production"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Zhong Wang" }]
-dependencies = []
+dependencies = [
+    # Core web framework
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    # Database
+    "SQLAlchemy>=2.0.23",
+    "alembic>=1.13.1",
+    "aiosqlite>=0.19.0",
+    # Core utilities
+    "PyYAML==6.0.1",
+    "jinja2>=3.1.0",
+    "rich>=13.0.0",
+    # CLI
+    "typer>=0.9.0",
+]
 
 [project.optional-dependencies]
+# Development tools
 dev = [
-    "pytest>=8.2.0",
+    "pytest==8.2.0",
     "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.21.1",
     "ruff>=0.1.0",
     "mypy>=1.7.0",
     "pre-commit>=3.5.0",
     "loguru>=0.7.2",
 ]
+
+# Backend-specific dependencies
+backend = [
+    "pydantic==2.5.0",
+    "pydantic-settings==2.1.0",
+    "redis==5.0.1",
+    "python-multipart==0.0.6",
+    "python-dotenv==1.0.0",
+    "aiofiles==23.2.1",
+    "websockets==12.0",
+    "psutil==5.9.8",
+    "httpx==0.25.2",
+    "sentry-sdk[fastapi]>=2.0.0",
+]
+
+# Media processing
+media = [
+    "Pillow==10.4.0",
+    "pydub==0.25.1",
+    "numpy>=1.24.0",
+    "mutagen==1.47.0",
+]
+
+# AI and API integrations
+ai = [
+    "openai>=2.7.2",
+]
+
+# YouTube API
+youtube = [
+    "google-api-python-client>=2.100.0",
+    "google-auth-httplib2>=0.1.1",
+    "google-auth-oauthlib>=1.1.0",
+]
+
+# File watching and monitoring
+watch = [
+    "watchdog==4.0.1",
+]
+
+# All dependencies (for full installation)
+all = [
+    "kat-rec[backend,media,ai,youtube,watch]",
+]
+
+# Backend with all features (recommended for backend development)
+backend-full = [
+    "kat-rec[backend,media,ai,youtube,watch,dev]",
+]
+
+[project.scripts]
+mcpos = "mcpos.cli.main:app"
+
+[tool.setuptools]
+packages = ["mcpos", "mcpos.core", "mcpos.assets", "mcpos.adapters", "mcpos.cli"]
 
 [tool.ruff]
 line-length = 100
@@ -71,11 +142,14 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+# Only add coverage options if pytest-cov is installed
+# Users can run with --cov manually if needed: pytest --cov=src --cov=scripts
+# Or install dev dependencies: pip install .[dev] or pip install pytest-cov
 addopts = [
-    "--cov=src",
-    "--cov=scripts",
-    "--cov-report=term-missing",
-    "--cov-report=html",
-    "--cov-report=xml",
     "-v",
+]
+markers = [
+    "smoke: P0 smoke tests that execute actual workflow functions",
+    "slow: Tests that take a long time to run",
+    "integration: Integration tests that require external dependencies",
 ]
