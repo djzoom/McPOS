@@ -1,0 +1,236 @@
+{
+  "events": [
+    {
+      "timestamp": "2026-01-30T13:55:17.359392",
+      "stage": "unknown",
+      "status": "started",
+      "episode_id": "kat_20260305"
+    },
+    {
+      "timestamp": "2026-01-30T13:55:31.144835",
+      "stage": "unknown",
+      "status": "completed",
+      "episode_id": "kat_20260305",
+      "duration": 13.79
+    },
+    {
+      "timestamp": "2026-01-30T13:55:31.146228",
+      "stage": "unknown",
+      "status": "completed",
+      "episode_id": "kat_20260305",
+      "duration": 13.79
+    },
+    {
+      "timestamp": "2026-01-30T13:55:31.147063",
+      "stage": "unknown",
+      "status": "started",
+      "episode_id": "kat_20260306"
+    },
+    {
+      "timestamp": "2026-01-30T13:55:43.575213",
+      "stage": "unknown",
+      "status": "completed",
+      "episode_id": "kat_20260306",
+      "duration": 12.43
+    },
+    {
+      "timestamp": "2026-01-30T13:55:43.576401",
+      "stage": "unknown",
+      "status": "completed",
+      "episode_id": "kat_20260306",
+      "duration": 12.43
+    },
+    {
+      "timestamp": "2026-01-30T13:55:43.582438",
+      "stage": "unknown",
+      "status": "started",
+      "episode_id": "kat_20260325"
+    },
+    {
+      "timestamp": "2026-01-30T13:55:57.596227",
+      "stage": "unknown",
+      "status": "completed",
+      "episode_id": "kat_20260325",
+      "duration": 14.01
+    },
+    {
+      "timestamp": "2026-01-30T13:55:57.597767",
+      "stage": "unknown",
+      "status": "completed",
+      "episode_id": "kat_20260325",
+      "duration": 14.02
+    },
+    {
+      "timestamp": "2026-01-30T13:55:57.598676",
+      "stage": "unknown",
+      "status": "started",
+      "episode_id": "kat_20260328"
+    },
+    {
+      "timestamp": "2026-01-30T13:56:11.544280",
+      "stage": "unknown",
+      "status": "completed",
+      "episode_id": "kat_20260328",
+      "duration": 13.95
+    },
+    {
+      "timestamp": "2026-01-30T13:56:11.546572",
+      "stage": "unknown",
+      "status": "completed",
+      "episode_id": "kat_20260328",
+      "duration": 13.95
+    },
+    {
+      "timestamp": "2026-01-30T14:00:33.708307",
+      "stage": "unknown",
+      "status": "started",
+      "episode_id": "kat_20260305"
+    },
+    {
+      "timestamp": "2026-01-30T14:00:33.911178",
+      "stage": "unknown",
+      "status": "failed",
+      "episode_id": "kat_20260305",
+      "duration": 0.21,
+      "error_message": "Video upload status is 'uploaded', expected 'processed'"
+    },
+    {
+      "timestamp": "2026-01-30T14:00:43.913545",
+      "stage": "unknown",
+      "status": "started",
+      "episode_id": "kat_20260306"
+    },
+    {
+      "timestamp": "2026-01-30T14:00:44.307794",
+      "stage": "unknown",
+      "status": "failed",
+      "episode_id": "kat_20260306",
+      "duration": 0.39,
+      "error_message": "Video upload status is 'uploaded', expected 'processed'"
+    },
+    {
+      "timestamp": "2026-01-30T14:01:04.314700",
+      "stage": "unknown",
+      "status": "started",
+      "episode_id": "kat_20260325"
+    },
+    {
+      "timestamp": "2026-01-30T14:01:04.787551",
+      "stage": "unknown",
+      "status": "failed",
+      "episode_id": "kat_20260325",
+      "duration": 0.47,
+      "error_message": "Video upload status is 'uploaded', expected 'processed'"
+    },
+    {
+      "timestamp": "2026-01-30T14:01:14.793136",
+      "stage": "unknown",
+      "status": "started",
+      "episode_id": "kat_20260328"
+    },
+    {
+      "timestamp": "2026-01-30T14:01:15.262720",
+      "stage": "unknown",
+      "status": "failed",
+      "episode_id": "kat_20260328",
+      "duration": 0.47,
+      "error_message": "Video upload status is 'uploaded', expected 'processed'"
+    },
+    {
+      "timestamp": "2026-01-30T14:19:45.503531",
+      "stage": "unknown",
+      "status": "started",
+      "episode_id": "kat_20260305"
+    },
+    {
+      "timestamp": "2026-01-30T14:19:45.718501",
+      "stage": "unknown",
+      "status": "failed",
+      "episode_id": "kat_20260305",
+      "duration": 0.22,
+      "error_message": "Video upload status is 'uploaded', expected 'processed'"
+    },
+    {
+      "timestamp": "2026-01-30T17:16:57.227990",
+      "stage": "unknown",
+      "status": "started",
+      "episode_id": "kat_20260305"
+    },
+    {
+      "timestamp": "2026-01-30T17:17:06.843809",
+      "stage": "unknown",
+      "status": "completed",
+      "episode_id": "kat_20260305",
+      "duration": 9.62
+    },
+    {
+      "timestamp": "2026-01-30T17:17:06.847102",
+      "stage": "unknown",
+      "status": "completed",
+      "episode_id": "kat_20260305",
+      "duration": 9.62
+    },
+    {
+      "timestamp": "2026-01-30T17:17:06.849475",
+      "stage": "unknown",
+      "status": "started",
+      "episode_id": "kat_20260306"
+    },
+    {
+      "timestamp": "2026-01-30T17:17:14.597626",
+      "stage": "unknown",
+      "status": "completed",
+      "episode_id": "kat_20260306",
+      "duration": 7.75
+    },
+    {
+      "timestamp": "2026-01-30T17:17:14.600419",
+      "stage": "unknown",
+      "status": "completed",
+      "episode_id": "kat_20260306",
+      "duration": 7.75
+    },
+    {
+      "timestamp": "2026-01-30T17:17:14.602204",
+      "stage": "unknown",
+      "status": "started",
+      "episode_id": "kat_20260325"
+    },
+    {
+      "timestamp": "2026-01-30T17:17:23.663557",
+      "stage": "unknown",
+      "status": "completed",
+      "episode_id": "kat_20260325",
+      "duration": 9.06
+    },
+    {
+      "timestamp": "2026-01-30T17:17:23.666268",
+      "stage": "unknown",
+      "status": "completed",
+      "episode_id": "kat_20260325",
+      "duration": 9.06
+    },
+    {
+      "timestamp": "2026-01-30T17:17:23.667816",
+      "stage": "unknown",
+      "status": "started",
+      "episode_id": "kat_20260328"
+    }
+  ],
+  "daily_stats": {
+    "2026-01-30": {
+      "total_events": 32,
+      "completed": 14,
+      "failed": 5,
+      "total_duration": 162.9769549872742,
+      "stages": {
+        "unknown": {
+          "count": 19,
+          "total_duration": 162.9769549872742,
+          "failed": 5
+        }
+      }
+    }
+  },
+  "summary": {}
+}
