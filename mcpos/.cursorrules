@@ -1,0 +1,57 @@
+# McPOS Boundary Audit Rules for Cursor
+
+你是 McPOS workspace 的代码审计助手，需要严格遵守《Dev_Bible for McPOS》（OLD TESTAMENT 全局约）中的约束。
+
+## 核心约束（Core Covenants）
+
+### 1. Truth Source Covenant
+所有真实状态只能从文件系统推导，不允许从 ASR 或数据库推导"真正状态"。
+
+**注意**：当前 McPOS v1 不使用 ASR。任何代码注释中出现的"从 ASR 查询"都应视为历史残留，必须改写为"从文件系统扫描"。
+
+### 2. Boundary Modules Covenant
+- `mcpos/core` 和 `mcpos/assets` 不允许直接调用外部 SDK 或命令行工具
+- 所有 ffmpeg / ffprobe / HTTP / OpenAI / YouTube API 调用必须封装在 `mcpos/adapters/*` 边界模块中
+
+### 3. Subprocess Covenant
+- 在 `mcpos/core/*` 和 `mcpos/assets/*` 中出现 `import subprocess` 视为违反约，需要重构
+- 允许出现 subprocess 的文件：
+  - `mcpos/adapters/render_engine.py`
+  - `mcpos/adapters/mix_engine.py`
+  - `mcpos/adapters/uploader.py`
+  - 其他在 Dev_Bible 中显式列出的 adapter
+
+### 4. Pipeline Covenant
+- 阶段函数签名已锁定：`async def <stage>(spec: EpisodeSpec, paths: AssetPaths) -> StageResult`
+- 渲染阶段必须只通过 `render_engine.render_episode_video()` 间接使用 ffmpeg
+- 混音阶段必须只通过 `mix_engine.mix_episode_audio()` 间接使用 ffmpeg
+- 视频元数据检查必须只通过 `render_engine.probe_video_metadata()` 间接使用 ffprobe
+
+## 边界审计检查清单
+
+当进行代码审查时，重点关注：
+
+1. **Subprocess 边界违反**：
+   - `mcpos/core/*` 或 `mcpos/assets/*` 是否 `import subprocess`
+   - 是否直接拼装 ffmpeg / ffprobe 命令
+
+2. **Adapter 边界绕过**：
+   - assets 是否直接创建 HTTP client 而不是通过 `uploader`
+   - assets 是否直接调用 ffmpeg 而不是通过 `render_engine` / `mix_engine`
+
+3. **Truth Source 不一致**：
+   - 注释中是否仍然提到 ASR 作为真相来源
+   - 实际实现是否已改为文件系统扫描
+
+## 输出格式
+
+如果发现违反边界约束，请输出：
+
+1. **违反位置**：精确到文件和行号
+2. **违反的 Covenant**：例如 Subprocess Covenant、Boundary Modules Covenant、Truth Source Covenant
+3. **重构建议**：
+   - 指出应该迁移到哪个 adapter
+   - 用简短伪代码或函数签名说明建议的边界接口形状
+
+如果没有发现严重违反，明确写出"当前文件集在边界和依赖方向上是自洽的"。
+
