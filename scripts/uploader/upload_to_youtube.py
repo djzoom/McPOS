@@ -22,6 +22,10 @@ try:
 except ImportError:
     PIL_AVAILABLE = False
 
+# Add project root to path FIRST, before any imports that depend on it
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+
 try:
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
@@ -32,54 +36,31 @@ try:
     GOOGLE_API_AVAILABLE = True
 except ImportError:
     GOOGLE_API_AVAILABLE = False
-    # Use logger if available, otherwise fallback to stderr
-    try:
-        from core.logger import get_logger
-        logger = get_logger()
-        logger.error(
-            "upload.dependencies.missing",
-            "Google API libraries not installed",
-        )
-    except ImportError:
     print('{"event": "upload", "status": "error", "error": "Google API libraries not installed"}', file=sys.stderr)
     sys.exit(1)
 
-# Add project root to path
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(REPO_ROOT / "src"))
-sys.path.insert(0, str(REPO_ROOT / "scripts" / "local_picker"))
+# Minimal local error handling (decoupled from old src/)
+STATE_MANAGEMENT_AVAILABLE = False
+get_state_manager = None
+get_logger = None
+get_event_bus = None
 
-# Import unified config and state management
-try:
-    from configuration import AppConfig
-    CONFIG_AVAILABLE = True
-except ImportError:
-    CONFIG_AVAILABLE = False
-    AppConfig = None
+class UploadError(Exception):
+    pass
 
-try:
-    from core.state_manager import get_state_manager
-    from core.logger import get_logger
-    from core.event_bus import get_event_bus
-    from core.errors import UploadError, TransientError, handle_errors
-    STATE_MANAGEMENT_AVAILABLE = True
-except ImportError:
-    STATE_MANAGEMENT_AVAILABLE = False
-    get_state_manager = None
-    get_logger = None
-    get_event_bus = None
-    # Fallback error classes
-    class UploadError(Exception):
-        pass
-    class TransientError(Exception):
-        pass
-    def handle_errors(context: str):
-        def decorator(func):
-            return func
-        return decorator
+class TransientError(Exception):
+    pass
+
+def handle_errors(context: str):
+    def decorator(func):
+        return func
+    return decorator
 
 # OAuth 2.0 scopes
-SCOPES = ['https://www.googleapis.com/auth/youtube.upload']
+SCOPES = [
+    'https://www.googleapis.com/auth/youtube.upload',
+    'https://www.googleapis.com/auth/youtube.force-ssl',
+]
 
 # Backward compatibility
 YouTubeUploadError = UploadError
@@ -93,11 +74,13 @@ def load_config() -> Dict:
     default_config = {
         "client_secrets_file": REPO_ROOT / "config" / "google" / "client_secrets.json",
         "token_file": REPO_ROOT / "config" / "google" / "youtube_token.json",
-        "privacy_status": "unlisted",
+        "privacy_status": "private",  # 默认设为 private，配合排播时间使用
         "category_id": 10,
         "tags": ["lofi", "music", "Kat Records", "chill"],
         "quota_limit_daily": 9000,
         "playlist_id": None,  # Optional: YouTube playlist ID to add videos to
+        "default_language": "en",  # Default language for YouTube videos
+        "schedule": True,  # 默认启用排播
     }
     
     if config_path.exists():
@@ -108,20 +91,61 @@ def load_config() -> Dict:
             youtube_config = config_data.get("youtube", {})
             upload_defaults = youtube_config.get("upload_defaults", {})
             
-            if youtube_config.get("client_secrets_file"):
-                default_config["client_secrets_file"] = REPO_ROOT / youtube_config["client_secrets_file"]
-            if youtube_config.get("token_file"):
-                default_config["token_file"] = REPO_ROOT / youtube_config["token_file"]
-            if upload_defaults.get("privacyStatus"):
-                default_config["privacy_status"] = upload_defaults["privacyStatus"]
-            if upload_defaults.get("categoryId"):
-                default_config["category_id"] = upload_defaults["categoryId"]
-            if upload_defaults.get("tags"):
-                default_config["tags"] = upload_defaults["tags"]
-            if youtube_config.get("quota_limit_daily"):
-                default_config["quota_limit_daily"] = youtube_config["quota_limit_daily"]
-            if youtube_config.get("playlist_id"):
-                default_config["playlist_id"] = youtube_config["playlist_id"]
+            # client_secrets_file
+            client_secrets_file = youtube_config.get("client_secrets_file")
+            if client_secrets_file:
+                default_config["client_secrets_file"] = REPO_ROOT / client_secrets_file
+            
+            # token_file
+            token_file = youtube_config.get("token_file")
+            if token_file:
+                default_config["token_file"] = REPO_ROOT / token_file
+            
+            # privacyStatus: 只在非 None 时覆盖，并强制转成 str
+            privacy_status = upload_defaults.get("privacyStatus")
+            if privacy_status is not None:
+                default_config["privacy_status"] = str(privacy_status)
+            
+            # categoryId: 只在非 None 时覆盖，并强制转成 int
+            category_id = upload_defaults.get("categoryId")
+            if category_id is not None:
+                try:
+                    default_config["category_id"] = int(category_id)
+                except (TypeError, ValueError):
+                    if STATE_MANAGEMENT_AVAILABLE and get_logger:
+                        logger = get_logger()
+                        logger.warning(
+                            "upload.config.category.invalid",
+                            f"Invalid categoryId in config.yaml: {category_id}, using default 10",
+                        )
+            
+            # tags: 只在是 list 且非空时覆盖
+            tags = upload_defaults.get("tags")
+            if isinstance(tags, list) and tags:
+                default_config["tags"] = [str(t) for t in tags]
+            
+            # defaultLanguage: 只在非 None 时覆盖，并强制转成 str
+            default_language = upload_defaults.get("defaultLanguage")
+            if default_language is not None:
+                default_config["default_language"] = str(default_language)
+            
+            # quota_limit_daily: 只在非 None 时覆盖，并强制转成 int
+            quota_limit_daily = youtube_config.get("quota_limit_daily")
+            if quota_limit_daily is not None:
+                try:
+                    default_config["quota_limit_daily"] = int(quota_limit_daily)
+                except (TypeError, ValueError):
+                    if STATE_MANAGEMENT_AVAILABLE and get_logger:
+                        logger = get_logger()
+                        logger.warning(
+                            "upload.config.quota.invalid",
+                            f"Invalid quota_limit_daily in config.yaml: {quota_limit_daily}, using default 9000",
+                        )
+            
+            # playlist_id: 可以为 None，但如果有值，转成 str
+            playlist_id = youtube_config.get("playlist_id")
+            if playlist_id is not None:
+                default_config["playlist_id"] = str(playlist_id)
         except Exception as e:
             # Use defaults on error, but log it
             if STATE_MANAGEMENT_AVAILABLE and get_logger:
@@ -261,7 +285,9 @@ def upload_video(
     subtitle_path: Optional[Path] = None,
     thumbnail_path: Optional[Path] = None,
     episode_id: Optional[str] = None,
-    max_retries: int = 5
+    max_retries: int = 5,
+    privacy_status: Optional[str] = None,
+    publish_at: Optional[str] = None,
 ) -> Dict[str, str]:
     """
     Upload video to YouTube with retry mechanism
@@ -282,34 +308,58 @@ def upload_video(
     """
     # Import here to avoid circular imports
     try:
-        from src.models.upload_config import UploadConfig
         from scripts.uploader.upload_helpers import (
+            UploadConfig,
             prepare_body,
             resumable_upload,
             attach_subtitle,
             postprocess_thumbnail,
             attach_to_playlist,
+            validate_video_asset,
         )
-    except ImportError:
-        # Fallback to old implementation if imports fail
-        return _upload_video_legacy(youtube, video_file, title, description, config, 
-                                   subtitle_path, thumbnail_path, episode_id, max_retries)
+    except ImportError as e:
+        return _upload_video_legacy(
+            youtube,
+            video_file,
+            title,
+            description,
+            config,
+            subtitle_path,
+            thumbnail_path,
+            episode_id,
+            max_retries,
+        )
+    
+    # Upload preflight validation (0-byte + duration checks)
+    validate_video_asset(video_file, episode_id=episode_id)
+
+    # 使用前兜底：确保关键参数不是 None
+    # 即使 load_config() 做了清洗，这里再加一层保险，防止未来有人改了配置加载逻辑
+    category_id = config.get("category_id") or 10
+    # 注意：默认 privacy_status 应该是 "private"（配合排播使用），而不是 "unlisted"
+    privacy_status = privacy_status or config.get("privacy_status") or "private"
+    tags = config.get("tags") or ["lofi", "music", "Kat Records", "chill"]
+    default_language = config.get("default_language") or "en"
     
     # Create UploadConfig
+    # If explicit publish_at is provided, ensure scheduled publishing is enabled
+    schedule_flag = True if publish_at else config.get("schedule", True)
+
     upload_config = UploadConfig(
         video_file=video_file,
         title=title,
         description=description,
-        privacy_status=config["privacy_status"],
-        category_id=config["category_id"],
-        tags=config["tags"],
+        privacy_status=privacy_status,
+        category_id=category_id,
+        tags=tags,
         subtitle_path=subtitle_path,
         thumbnail_path=thumbnail_path,
         episode_id=episode_id,
         max_retries=max_retries,
-        schedule=config.get("schedule", False),
-        default_language=config.get("default_language", "en"),
+        schedule=schedule_flag,  # 默认启用排播
+        default_language=default_language,
         playlist_id=config.get("playlist_id"),
+        publish_at=publish_at,
     )
     
     start_time = time.time()
@@ -433,17 +483,7 @@ def log_event(event: str, episode_id: Optional[str], status: str, **kwargs) -> N
     with log_file.open("a", encoding="utf-8") as f:
         f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
     
-    # Also use structured logger if available
-    if STATE_MANAGEMENT_AVAILABLE and get_logger:
-        logger = get_logger()
-        level = "ERROR" if status == "failed" else ("INFO" if status == "completed" else "DEBUG")
-        logger.log_event(
-            event_name=f"upload.{status}",
-            message=kwargs.get("message", f"Upload {status}"),
-            episode_id=episode_id,
-            level=level,
-            metadata=kwargs
-        )
+    _ = kwargs
 
 
 def read_metadata_files(
@@ -456,7 +496,7 @@ def read_metadata_files(
     Read YouTube metadata from files
     
     Args:
-        episode_id: Episode ID
+        episode_id: Episode ID (can be YYYYMMDD format or channel_YYYYMMDD format)
         video_file: Video file path (used to find episode directory)
         title_file: Optional explicit title file path
         desc_file: Optional explicit description file path
@@ -472,15 +512,47 @@ def read_metadata_files(
     }
     
     # Try to find episode directory
+    # 优先使用 video_file 所在的目录（McPOS 路径：channels/<channel>/output/<episode_id>/）
     episode_dir = video_file.parent
     output_dir = REPO_ROOT / "output"
     
-    # Strategy: Always prefer final directories (YYYY-MM-DD_Title format) as they contain complete metadata
-    # 1. Check if video is already in a final directory
-    if episode_dir.name.startswith(episode_id[:8]) and "-" in episode_dir.name:
-        # Video is in final directory, use it
-        pass
-    else:
+    # 从视频文件路径推断可能的 episode_id 格式
+    # 如果 episode_id 是 YYYYMMDD 格式，尝试推断完整的 channel_YYYYMMDD 格式
+    # 例如：如果 episode_id = "20260201"，视频在 channels/kat/output/kat_20260201/
+    # 则尝试使用 "kat_20260201" 作为完整的 episode_id
+    inferred_episode_id = episode_id
+    if "_" not in episode_id and len(episode_id) == 8:
+        # episode_id 是 YYYYMMDD 格式，尝试从目录名推断
+        # 检查 video_file 的父目录名是否包含 channel_YYYYMMDD 格式
+        parent_dir_name = episode_dir.name
+        if "_" in parent_dir_name and parent_dir_name.endswith(episode_id):
+            inferred_episode_id = parent_dir_name
+        else:
+            # 尝试从视频文件名推断
+            video_file_name = video_file.stem  # 例如：kat_20260201_youtube
+            if "_" in video_file_name:
+                parts = video_file_name.split("_")
+                if len(parts) >= 2 and parts[-1] == "youtube":
+                    # 提取 channel_YYYYMMDD 部分
+                    inferred_episode_id = "_".join(parts[:-1])
+    
+    # Strategy: 优先使用 video_file 所在的目录（McPOS 路径）
+    # 1. 如果 video_file 所在的目录包含完整的元数据文件，直接使用
+    # 2. 否则，尝试在旧世界的 output 目录中查找（向后兼容）
+    
+    # 检查 video_file 所在目录是否包含元数据文件
+    # 尝试两种格式：inferred_episode_id（完整格式）和 episode_id（日期格式）
+    has_metadata_in_video_dir = (
+        (episode_dir / f"{inferred_episode_id}_youtube_title.txt").exists() or
+        (episode_dir / f"{episode_id}_youtube_title.txt").exists() or
+        (episode_dir / f"{inferred_episode_id}_youtube.srt").exists() or
+        (episode_dir / f"{episode_id}_youtube.srt").exists() or
+        (episode_dir / f"{inferred_episode_id}_cover.png").exists() or
+        (episode_dir / f"{episode_id}_cover.png").exists()
+    )
+    
+    if not has_metadata_in_video_dir:
+        # 如果 video_file 所在目录没有元数据，尝试在旧世界的 output 目录中查找
         # 2. Video is in output root, search for final directory with matching episode ID
         final_dirs = list(output_dir.glob(f"{episode_id[:8]}-*"))
         if final_dirs:
@@ -491,7 +563,8 @@ def read_metadata_files(
                 if title_file.exists():
                     best_dir = d
                     break
-            episode_dir = best_dir if best_dir else final_dirs[0]
+            if best_dir:
+                episode_dir = best_dir
         else:
             # 3. Fallback: search recursively in output directory
             found_dir = None
@@ -500,20 +573,24 @@ def read_metadata_files(
                 break
             if found_dir:
                 episode_dir = found_dir
-            # If still not found, use output root as last resort
     
     # Read title
     if title_file and title_file.exists():
         metadata["title"] = title_file.read_text(encoding="utf-8").strip()
     else:
-        # Try episode_dir first
-        title_path = episode_dir / f"{episode_id}_youtube_title.txt"
+        # Try episode_dir first, with both inferred_episode_id and episode_id formats
+        title_path = episode_dir / f"{inferred_episode_id}_youtube_title.txt"
+        if not title_path.exists():
+            title_path = episode_dir / f"{episode_id}_youtube_title.txt"
         if title_path.exists():
             metadata["title"] = title_path.read_text(encoding="utf-8").strip()
         else:
             # Fallback: search in all final directories
             for final_dir in output_dir.glob(f"{episode_id[:8]}-*"):
-                fallback_title = final_dir / f"{episode_id}_youtube_title.txt"
+                # Try both formats
+                fallback_title = final_dir / f"{inferred_episode_id}_youtube_title.txt"
+                if not fallback_title.exists():
+                    fallback_title = final_dir / f"{episode_id}_youtube_title.txt"
                 if fallback_title.exists():
                     metadata["title"] = fallback_title.read_text(encoding="utf-8").strip()
                     break
@@ -522,38 +599,53 @@ def read_metadata_files(
     if desc_file and desc_file.exists():
         metadata["description"] = desc_file.read_text(encoding="utf-8").strip()
     else:
-        # Try episode_dir first
-        desc_path = episode_dir / f"{episode_id}_youtube_description.txt"
+        # Try episode_dir first, with both inferred_episode_id and episode_id formats
+        desc_path = episode_dir / f"{inferred_episode_id}_youtube_description.txt"
+        if not desc_path.exists():
+            desc_path = episode_dir / f"{episode_id}_youtube_description.txt"
         if desc_path.exists():
             metadata["description"] = desc_path.read_text(encoding="utf-8").strip()
         else:
             # Fallback: search in all final directories
             for final_dir in output_dir.glob(f"{episode_id[:8]}-*"):
-                fallback_desc = final_dir / f"{episode_id}_youtube_description.txt"
+                # Try both formats
+                fallback_desc = final_dir / f"{inferred_episode_id}_youtube_description.txt"
+                if not fallback_desc.exists():
+                    fallback_desc = final_dir / f"{episode_id}_youtube_description.txt"
                 if fallback_desc.exists():
                     metadata["description"] = fallback_desc.read_text(encoding="utf-8").strip()
                     break
     
     # Find subtitle
-    srt_path = episode_dir / f"{episode_id}_youtube.srt"
+    srt_path = episode_dir / f"{inferred_episode_id}_youtube.srt"
+    if not srt_path.exists():
+        srt_path = episode_dir / f"{episode_id}_youtube.srt"
     if srt_path.exists():
         metadata["subtitle_path"] = str(srt_path)
     else:
         # Fallback: search in final directories
         for final_dir in output_dir.glob(f"{episode_id[:8]}-*"):
-            fallback_srt = final_dir / f"{episode_id}_youtube.srt"
+            # Try both formats
+            fallback_srt = final_dir / f"{inferred_episode_id}_youtube.srt"
+            if not fallback_srt.exists():
+                fallback_srt = final_dir / f"{episode_id}_youtube.srt"
             if fallback_srt.exists():
                 metadata["subtitle_path"] = str(fallback_srt)
                 break
     
     # Find thumbnail
-    cover_path = episode_dir / f"{episode_id}_cover.png"
+    cover_path = episode_dir / f"{inferred_episode_id}_cover.png"
+    if not cover_path.exists():
+        cover_path = episode_dir / f"{episode_id}_cover.png"
     if cover_path.exists():
         metadata["thumbnail_path"] = str(cover_path)
     else:
         # Fallback: search in final directories
         for final_dir in output_dir.glob(f"{episode_id[:8]}-*"):
-            fallback_cover = final_dir / f"{episode_id}_cover.png"
+            # Try both formats
+            fallback_cover = final_dir / f"{inferred_episode_id}_cover.png"
+            if not fallback_cover.exists():
+                fallback_cover = final_dir / f"{episode_id}_cover.png"
             if fallback_cover.exists():
                 metadata["thumbnail_path"] = str(fallback_cover)
                 break
@@ -563,17 +655,24 @@ def read_metadata_files(
 
 def parse_episode_date(episode_id: str) -> Optional[datetime]:
     """
-    Parse episode ID (YYYYMMDD format) to datetime object
+    Parse episode ID to datetime object.
+    
+    Supports both YYYYMMDD and channel_YYYYMMDD formats (e.g., "20251104", "kat_20251104").
     
     Args:
-        episode_id: Episode ID string (e.g., "20251104")
+        episode_id: Episode ID string
     
     Returns:
         datetime object in UTC, or None if parsing fails
     """
     try:
-        if len(episode_id) >= 8:
-            date_str = episode_id[:8]
+        if not episode_id:
+            return None
+        # Prefer any 8-digit date token within the ID (e.g., kat_20260306)
+        import re
+        match = re.search(r"(\d{8})", str(episode_id))
+        if match:
+            date_str = match.group(1)
             return datetime.strptime(date_str, "%Y%m%d").replace(tzinfo=timezone.utc)
     except (ValueError, AttributeError) as e:
         # Invalid episode_id format, return None and log if available
@@ -605,6 +704,12 @@ def resize_thumbnail_if_needed(thumbnail_path: Path, max_size_mb: float = 2.0, m
     if not thumbnail_path.exists():
         return thumbnail_path
     
+    # 确保参数不是 None（最后一道防线）
+    if max_size_mb is None:
+        max_size_mb = 2.0
+    if max_width is None:
+        max_width = 1280
+    
     # Check file size
     file_size_mb = thumbnail_path.stat().st_size / (1024 * 1024)
     
@@ -612,43 +717,36 @@ def resize_thumbnail_if_needed(thumbnail_path: Path, max_size_mb: float = 2.0, m
         with Image.open(thumbnail_path) as img:
             width, height = img.size
             
-            # Check if resizing is needed
-            needs_resize = False
-            if file_size_mb > max_size_mb:
-                needs_resize = True
-            elif width > max_width:
-                needs_resize = True
+            # 验证 width 和 height 不是 None
+            if width is None or height is None:
+                if STATE_MANAGEMENT_AVAILABLE and get_logger:
+                    logger = get_logger()
+                    logger.warning(
+                        "upload.thumbnail.skip",
+                        "Thumbnail image size is None, skipping resize",
+                        episode_id=None,
+                    )
+                return thumbnail_path
             
-            if needs_resize:
-                # Calculate new dimensions (maintain aspect ratio)
-                if width > max_width:
-                    ratio = max_width / width
-                    new_width = max_width
-                    new_height = int(height * ratio)
-                else:
-                    new_width = width
-                    new_height = height
-                
-                # Resize image
-                resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-                
-                # Save to temporary file
-                temp_path = thumbnail_path.parent / f"{thumbnail_path.stem}_resized{thumbnail_path.suffix}"
-                resized_img.save(temp_path, format=img.format, optimize=True, quality=85)
-                
-                # Check if new file is small enough
-                new_size_mb = temp_path.stat().st_size / (1024 * 1024)
-                if new_size_mb <= max_size_mb:
-                    return temp_path
-                else:
-                    # If still too large, try lower quality
-                    resized_img.save(temp_path, format=img.format, optimize=True, quality=70)
-                    return temp_path
+            # NOTE: Thumbnail resizing disabled to avoid writing *_resized files.
+            # Keep original cover asset only.
+            if (file_size_mb > max_size_mb) or (width > max_width):
+                if STATE_MANAGEMENT_AVAILABLE and get_logger:
+                    logger = get_logger()
+                    logger.warning(
+                        "upload.thumbnail.skip",
+                        "Thumbnail exceeds size constraints; resize disabled, using original",
+                        episode_id=None,
+                    )
     except Exception as e:
         # If resizing fails, return original
         if STATE_MANAGEMENT_AVAILABLE and get_logger:
             logger = get_logger()
-            logger.warning(f"Thumbnail resize failed: {e}", episode_id=None)
+            logger.warning(
+                "upload.thumbnail.failed",
+                f"Thumbnail resize failed: {e}",
+                episode_id=None,
+            )
         return thumbnail_path
     
     return thumbnail_path
@@ -662,7 +760,8 @@ def build_youtube_metadata(
     tags: Optional[List[str]] = None,
     category_id: int = 10,
     schedule: bool = False,
-    default_language: str = "en"
+    default_language: str = "en",
+    publish_at: Optional[str] = None
 ) -> Dict:
     """
     Build complete YouTube metadata payload with all standard and optional fields
@@ -689,6 +788,14 @@ def build_youtube_metadata(
     Returns:
         Complete metadata dictionary ready for YouTube API
     """
+    # 确保关键参数不是 None（最后一道防线）
+    if category_id is None:
+        category_id = 10
+    if privacy is None:
+        privacy = "unlisted"
+    if default_language is None:
+        default_language = "en"
+    
     # Parse episode date from episode_id
     episode_date = parse_episode_date(episode_id)
     
@@ -719,13 +826,54 @@ def build_youtube_metadata(
         'selfDeclaredMadeForKids': False
     }
     
-    # Add scheduled publishing if requested
-    if schedule and episode_date:
-        # Set publish time to episode date at 9:00 AM local time
-        # Convert to UTC for API (adjust timezone as needed)
-        publish_at = episode_date.replace(hour=9, minute=0, second=0)
-        # Convert to RFC 3339 format (ISO 8601)
-        status['publishAt'] = publish_at.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+    # If explicit publish_at is provided, always use it and enforce private visibility
+    if publish_at:
+        status['publishAt'] = publish_at
+        if privacy != "private":
+            status['privacyStatus'] = "private"
+    # 设置排播时间：如果 schedule=True 或 privacy=private，总是设置 publishAt
+    # 确保 episode_date 不是 None（防御性编程）
+    elif (schedule or privacy == "private") and episode_date is not None:
+        try:
+            # Schedule publishing in a configurable local timezone (default: Asia/Shanghai 09:00).
+            # Environment overrides:
+            #   UPLOAD_SCHEDULE_TZ (e.g., "America/New_York")
+            #   UPLOAD_SCHEDULE_HOUR (e.g., "9")
+            #   UPLOAD_SCHEDULE_MINUTE (e.g., "0")
+            import os
+            from datetime import timedelta
+            from zoneinfo import ZoneInfo
+
+            tz_name = os.getenv("UPLOAD_SCHEDULE_TZ") or "Asia/Shanghai"
+            hour = int(os.getenv("UPLOAD_SCHEDULE_HOUR") or "9")
+            minute = int(os.getenv("UPLOAD_SCHEDULE_MINUTE") or "0")
+
+            # Parse date token directly to avoid UTC date shifts
+            import re
+            match = re.search(r"(\d{8})", str(episode_id))
+            if not match:
+                raise ValueError("episode_id does not contain YYYYMMDD token")
+            date_str = match.group(1)
+            year = int(date_str[0:4])
+            month = int(date_str[4:6])
+            day = int(date_str[6:8])
+
+            local_tz = ZoneInfo(tz_name)
+            local_publish_at = datetime(year, month, day, hour, minute, 0, tzinfo=local_tz)
+            publish_at = local_publish_at.astimezone(timezone.utc)
+
+            # Convert to RFC 3339 format (ISO 8601)
+            status['publishAt'] = publish_at.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+            if privacy != "private":
+                status['privacyStatus'] = "private"
+        except (AttributeError, ValueError, Exception) as e:
+            if STATE_MANAGEMENT_AVAILABLE and get_logger:
+                logger = get_logger()
+                logger.warning(
+                    "upload.metadata.schedule.failed",
+                    f"Failed to set scheduled publishing: {e}",
+                    metadata={"episode_id": episode_id, "episode_date": str(episode_date)}
+                )
     
     # Build recording details (derived from episode_id)
     body = {
@@ -734,10 +882,21 @@ def build_youtube_metadata(
     }
     
     # Add recording details if episode date is available
-    if episode_date:
-        body['recordingDetails'] = {
-            'recordingDate': episode_date.strftime('%Y-%m-%dT%H:%M:%S.000Z')
-        }
+    # 确保 episode_date 不是 None（防御性编程）
+    if episode_date is not None:
+        try:
+            body['recordingDetails'] = {
+                'recordingDate': episode_date.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+            }
+        except (AttributeError, ValueError) as e:
+            # 如果 episode_date 不是 datetime 对象或无法处理，跳过 recording details
+            if STATE_MANAGEMENT_AVAILABLE and get_logger:
+                logger = get_logger()
+                logger.warning(
+                    "upload.metadata.recording.failed",
+                    f"Failed to set recording details: {e}",
+                    metadata={"episode_id": episode_id, "episode_date": str(episode_date)}
+                )
     
     # Note: topicDetails is read-only and auto-generated by YouTube based on video content
     # We don't include it in the insert payload, but YouTube will automatically generate
@@ -780,7 +939,7 @@ def add_video_to_playlist(youtube, video_id: str, playlist_id: str, episode_id: 
         raise YouTubeUploadError(f"Playlist error: {str(e)}")
 
 
-def check_already_uploaded(episode_id: str) -> Optional[str]:
+def check_already_uploaded(episode_id: str, alt_episode_id: Optional[str] = None) -> Optional[str]:
     """
     Check if episode already has youtube_video_id
     
@@ -795,6 +954,10 @@ def check_already_uploaded(episode_id: str) -> Optional[str]:
         ep = state_manager.get_episode(episode_id)
         if ep and ep.get("youtube_video_id"):
             return ep.get("youtube_video_id")
+        if alt_episode_id:
+            ep_alt = state_manager.get_episode(alt_episode_id)
+            if ep_alt and ep_alt.get("youtube_video_id"):
+                return ep_alt.get("youtube_video_id")
     except Exception as e:
         # Log but don't fail - state manager might not be available
         if STATE_MANAGEMENT_AVAILABLE and get_logger:
@@ -808,6 +971,33 @@ def check_already_uploaded(episode_id: str) -> Optional[str]:
     return None
 
 
+def _normalize_episode_id(episode_id: str, video_file: Path) -> str:
+    """
+    Normalize episode_id to a canonical form when possible.
+    Prefer channel_YYYYMMDD inferred from the video directory or filename.
+    """
+    if not episode_id:
+        return episode_id
+    if "_" in episode_id:
+        return episode_id
+    if len(episode_id) != 8:
+        return episode_id
+
+    # Try to infer from parent directory name (e.g., kat_20260811)
+    parent_name = video_file.parent.name
+    if "_" in parent_name and parent_name.endswith(episode_id):
+        return parent_name
+
+    # Try to infer from video filename (e.g., kat_20260811_youtube.mp4)
+    stem = video_file.stem
+    if stem.endswith("_youtube") and "_" in stem:
+        candidate = "_".join(stem.split("_")[:-1])
+        if candidate.endswith(episode_id):
+            return candidate
+
+    return episode_id
+
+
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(
@@ -818,7 +1008,7 @@ def main():
     parser.add_argument(
         "--episode",
         required=True,
-        help="Episode ID (YYYYMMDD format)"
+        help="Episode ID (YYYYMMDD or channel_YYYYMMDD format)"
     )
     
     parser.add_argument(
@@ -855,7 +1045,15 @@ def main():
     parser.add_argument(
         "--schedule",
         action="store_true",
-        help="Schedule upload for episode date at 9:00 AM (requires episode_id to be in YYYYMMDD format)"
+        default=None,
+        help="Force enable scheduling (overrides config)"
+    )
+    
+    parser.add_argument(
+        "--no-schedule",
+        dest="schedule",
+        action="store_false",
+        help="Force disable scheduling (overrides config)"
     )
     
     args = parser.parse_args()
@@ -904,8 +1102,13 @@ def main():
         print(f'{{"event": "upload", "episode": "{episode_id}", "status": "error", "error": "Video file not found: {video_file}. Please specify --video or ensure file exists."}}')
         sys.exit(1)
     
+    # Normalize episode_id to avoid mixed log/flag naming (kat_YYYYMMDD vs YYYYMMDD)
+    original_episode_id = episode_id
+    episode_id = _normalize_episode_id(episode_id, video_file)
+
     # Check if already uploaded (idempotent)
-    existing_video_id = check_already_uploaded(episode_id)
+    alt_id = original_episode_id if original_episode_id != episode_id else None
+    existing_video_id = check_already_uploaded(episode_id, alt_id)
     if existing_video_id and not args.force:
         log_event("upload", episode_id, "skipped", video_id=existing_video_id, reason="already_uploaded")
         print(f'{{"event": "upload", "episode": "{episode_id}", "status": "skipped", "video_id": "{existing_video_id}", "reason": "already_uploaded"}}')
@@ -916,8 +1119,11 @@ def main():
     if args.privacy:
         config["privacy_status"] = args.privacy
     
-    # Add schedule flag to config
-    config["schedule"] = getattr(args, 'schedule', False)
+    # Add schedule flag to config（默认启用排播，除非明确指定 --no-schedule）
+    # 如果用户在命令行指定了 --schedule 或 --no-schedule，使用命令行的值
+    # 否则使用 config.yaml 中的值（默认为 True）
+    if args.schedule is not None:
+        config["schedule"] = args.schedule
     
     # Read metadata
     metadata = read_metadata_files(episode_id, video_file, args.title_file, args.desc_file)
@@ -936,6 +1142,20 @@ def main():
                 "has_thumbnail": bool(metadata["thumbnail_path"]),
             }
         )
+    
+    # 严格模式: 如果显式传入了 title/desc 文件,但最终还是读不到内容,直接报错,不再用默认值兜底
+    strict = bool(args.title_file or args.desc_file)
+    
+    if strict and (not metadata["title"] or not metadata["description"]):
+        msg = "Missing title or description in strict mode"
+        log_event("upload", episode_id, "error", error=msg)
+        print(json.dumps({
+            "event": "upload",
+            "episode": episode_id,
+            "status": "error",
+            "error": msg,
+        }, ensure_ascii=False))
+        sys.exit(1)
     
     if not metadata["title"]:
         metadata["title"] = f"Kat Records Lo-Fi Mix - {episode_id}"
@@ -961,16 +1181,31 @@ def main():
     log_event("upload", episode_id, "started", video_file=str(video_file))
     
     try:
+        # 使用前兜底：确保关键参数不是 None（双重保险）
+        category_id = config.get("category_id") or 10
+        # 注意：默认 privacy_status 应该是 "private"（配合排播使用），而不是 "unlisted"
+        # 但如果 config.yaml 中设置了 privacyStatus，优先使用配置值（除非用户通过 --privacy 明确指定）
+        # 如果 config.yaml 中是 "unlisted"，我们需要强制改为 "private" 以配合排播
+        privacy_status = config.get("privacy_status")
+        if privacy_status == "unlisted":
+            # 如果配置是 "unlisted"，但我们需要排播，强制改为 "private"
+            privacy_status = "private"
+        elif not privacy_status:
+            # 如果配置中没有设置，使用默认值 "private"（配合排播使用）
+            privacy_status = "private"
+        tags = config.get("tags") or ["lofi", "music", "Kat Records", "chill"]
+        default_language = config.get("default_language") or "en"
+        
         # Build metadata for logging (validate JSON structure)
         test_metadata = build_youtube_metadata(
             episode_id=episode_id,
             title=metadata["title"] or f"Kat Records Lo-Fi Mix - {episode_id}",
             description=metadata["description"] or "Kat Records - Lo-Fi Radio Mix",
-            privacy=config["privacy_status"],
-            tags=config["tags"],
-            category_id=config["category_id"],
-            schedule=config.get("schedule", False),
-            default_language=config.get("default_language", "en")
+            privacy=privacy_status,
+            tags=tags,
+            category_id=category_id,
+            schedule=config.get("schedule", True),  # 默认启用排播
+            default_language=default_language
         )
         
         # Log metadata structure for debugging
@@ -1078,18 +1313,22 @@ def main():
     
     except Exception as e:
         error_msg = str(e)
+        import traceback
+        tb_str = traceback.format_exc()
         log_event("upload", episode_id, "error", error=error_msg, exception_type=type(e).__name__)
         
-        # Log to structured logger
+        # Log to structured logger with full traceback
         if STATE_MANAGEMENT_AVAILABLE and get_logger:
             logger = get_logger()
             logger.error(
                 "upload.unexpected_error",
                 f"Unexpected error during upload: {error_msg}",
                 episode_id=episode_id,
-                traceback=str(e),
-                metadata={"exception_type": type(e).__name__}
+                traceback=tb_str,
+                metadata={"exception_type": type(e).__name__, "full_traceback": tb_str}
             )
+        # Also print traceback to stderr for debugging
+        print(f"Full traceback:\n{tb_str}", file=sys.stderr)
         
         # 提供更友好的错误提示
         if "403" in error_msg or "accessNotConfigured" in error_msg:
@@ -1121,4 +1360,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
