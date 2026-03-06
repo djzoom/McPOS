@@ -115,3 +115,11 @@ data/google_sheet/
 
 #/  # 废弃的虚拟环境目录
 desktop/  # Tauri 构建产物（如果不再使用可删除）
+
+# Library media (now in ~/Studio/Library/)
+images_pool/
+channels/*/library/
+
+# McPOS runtime
+mcpos/logs/
+channels/*/credentials/
