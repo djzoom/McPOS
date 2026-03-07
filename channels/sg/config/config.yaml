@@ -23,3 +23,24 @@ instrumental_preferred: true
 timezone: "UTC"
 publish_time_local: "06:00"
 daily_quota_budget: 3000
+
+# VO pipeline
+enable_vo: false
+vo_mode: hybrid
+vo_intro_enabled: true
+vo_outro_enabled: true
+vo_ducking_db: -8.0
+vo_fade_sec: 3.0
+vo_lufs_target: -14.0
+vo_true_peak_dbtp: -1.0
+vo_channel_profile: sg_prayer
+vo_language: en
+vo_existing_asset_dir: "/Users/z/Studio/Library/sg/assets/vo"
+vo_existing_asset_prefer: true
+vo_voice_ref_audio_path: "/Users/z/Downloads/TTSBlindTest/tts6_pipeline/assets/Pomelo_VO_0728.mp3"
+vo_voice_ref_text_path: "/Users/z/Downloads/TTSBlindTest/tts6_pipeline/assets/ref_text.txt"
+vo_outro_margin_sec: 0.0
+vo_existing_legacy_intro_max_sec: 45
+vo_existing_legacy_outro_max_sec: 30
+vo_elevenlabs_voice_id: null
+vo_elevenlabs_model_id: "eleven_multilingual_v2"

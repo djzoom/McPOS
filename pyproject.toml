@@ -89,8 +89,8 @@ backend-full = [
 [project.scripts]
 mcpos = "mcpos.cli.main:app"
 
-[tool.setuptools]
-packages = ["mcpos", "mcpos.core", "mcpos.assets", "mcpos.adapters", "mcpos.cli"]
+[tool.setuptools.packages.find]
+include = ["mcpos*"]
 
 [tool.ruff]
 line-length = 100

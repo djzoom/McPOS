@@ -160,6 +160,14 @@ def get_channel_plugin(channel_id: str, config: ChannelConfig) -> ChannelPlugin:
     Raises KeyError if channel_id is not registered.
     """
     if channel_id not in _REGISTRY:
+        try:
+            import channels.kat.plugin  # noqa: F401
+            import channels.rbr.plugin  # noqa: F401
+            import channels.sg.plugin  # noqa: F401
+        except Exception:
+            pass
+
+    if channel_id not in _REGISTRY:
         raise KeyError(
             f"No plugin registered for channel '{channel_id}'. "
             f"Available: {list(_REGISTRY.keys())}"

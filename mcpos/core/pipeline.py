@@ -28,6 +28,7 @@ from ..assets import (
     generate_text_srt,
     run_render_for_episode,
 )
+from ..pipelines.sg_vo_pipeline import run_sg_pipeline_with_vo
 
 
 async def run_episode(spec: EpisodeSpec) -> EpisodeState:
@@ -40,6 +41,9 @@ async def run_episode(spec: EpisodeSpec) -> EpisodeState:
     TEXT_BASE 和 COVER 都只依赖 playlist.csv, 理论上可以并行,
     这里先保持简单的线性顺序。
     """
+    if spec.channel_id == "sg":
+        return await run_sg_pipeline_with_vo(spec)
+
     config = get_config()
     
     # 构建 AssetPaths
@@ -137,7 +141,7 @@ async def run_episode(spec: EpisodeSpec) -> EpisodeState:
         # 每个阶段结束后, 再基于文件系统重新检测一次状态
         state = detect_episode_state_from_filesystem(spec, asset_paths)
     
-    if all(state.stage_completed.values()):
+    if state.is_core_complete():
         emit_event(EventType.EPISODE_FINISHED, {
             "channel_id": spec.channel_id,
             "episode_id": spec.episode_id,
@@ -323,7 +327,7 @@ async def run_day(channel_id: str, date: str) -> List[EpisodeState]:
         "scope": "day",
         "channel_id": channel_id,
         "date": date,
-        "completed": len([r for r in states if all(r.stage_completed.values())]),
+        "completed": len([r for r in states if r.is_core_complete()]),
         "failed": len([r for r in states if r.error_message]),
     })
 
@@ -362,7 +366,7 @@ async def run_month(channel_id: str, year: int, month: int) -> List[EpisodeState
         "channel_id": channel_id,
         "year": year,
         "month": month,
-        "completed": len([r for r in states if all(r.stage_completed.values())]),
+        "completed": len([r for r in states if r.is_core_complete()]),
         "failed": len([r for r in states if r.error_message]),
     })
 

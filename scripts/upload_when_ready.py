@@ -21,7 +21,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from mcpos.models import EpisodeSpec, AssetPaths
-from mcpos.adapters.filesystem import build_asset_paths, detect_episode_state_from_filesystem
+from mcpos.adapters.filesystem import build_asset_paths, build_asset_paths_from_output_dir, detect_episode_state_from_filesystem
 from mcpos.adapters.uploader import upload_episode_video
 from mcpos.config import get_config
 from mcpos.core.logging import log_info, log_error
@@ -77,23 +77,7 @@ def _resolve_episode_paths(channel_id: str, date_str: str) -> tuple[EpisodeSpec,
 
     episode_id = episode_dir.name
     spec = EpisodeSpec(channel_id=channel_id, date=date_str, episode_id=episode_id)
-    paths = AssetPaths(
-        episode_output_dir=episode_dir,
-        playlist_csv=episode_dir / "playlist.csv",
-        recipe_json=episode_dir / "recipe.json",
-        final_mix_mp3=episode_dir / f"{episode_id}_final_mix.mp3",
-        timeline_csv=episode_dir / f"{episode_id}_final_mix_timeline.csv",
-        cover_png=episode_dir / f"{episode_id}_cover.png",
-        youtube_title_txt=episode_dir / f"{episode_id}_youtube_title.txt",
-        youtube_description_txt=episode_dir / f"{episode_id}_youtube_description.txt",
-        youtube_tags_txt=episode_dir / f"{episode_id}_youtube_tags.txt",
-        youtube_srt=episode_dir / f"{episode_id}_youtube.srt",
-        youtube_mp4=episode_dir / f"{episode_id}_youtube.mp4",
-        render_complete_flag=episode_dir / f"{episode_id}_render_complete.flag",
-        upload_complete_flag=episode_dir / f"{episode_id}_upload_complete.flag",
-        verify_complete_flag=episode_dir / f"{episode_id}_verify_complete.flag",
-        tmp_dir=episode_dir / "tmp",
-    )
+    paths = build_asset_paths_from_output_dir(episode_dir, episode_id=episode_id)
     return spec, paths
 
 
