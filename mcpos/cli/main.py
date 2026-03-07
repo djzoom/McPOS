@@ -76,7 +76,7 @@ def run_episode(
     
     result = asyncio.run(_run_episode(spec))
     
-    if all(result.stage_completed.values()):
+    if result.is_core_complete():
         typer.echo(f"✅ 完成: {episode_id}")
     else:
         typer.echo(f"❌ 失败: {episode_id}")
@@ -97,7 +97,7 @@ def run_day(
     
     results = asyncio.run(_run_day(channel_id, date))
     
-    completed = sum(1 for r in results if all(r.stage_completed.values()))
+    completed = sum(1 for r in results if r.is_core_complete())
     typer.echo(f"完成 {completed}/{len(results)} 期")
 
 
@@ -115,7 +115,7 @@ def run_month(
     
     results = asyncio.run(_run_month(channel_id, year, month))
     
-    completed = sum(1 for r in results if all(r.stage_completed.values()))
+    completed = sum(1 for r in results if r.is_core_complete())
     failed = sum(1 for r in results if r.error_message)
     
     typer.echo(f"完成 {completed}/{len(results)} 期")
@@ -257,7 +257,7 @@ def reset_last_ep(
 def run_stage(
     channel_id: str = typer.Argument(..., help="频道 ID，如 kat"),
     episode_id: str = typer.Argument(..., help="节目 ID，如 kat_20241201"),
-    stage_name: str = typer.Argument(..., help="阶段名称：INIT, TEXT_BASE, COVER, MIX, TEXT_SRT, RENDER"),
+    stage_name: str = typer.Argument(..., help="阶段名称：INIT, TEXT_BASE, COVER, MIX, VO_SCRIPT, VO_GEN, VO_MIX, TEXT_SRT, RENDER"),
 ):
     """
     运行单个阶段
@@ -267,6 +267,9 @@ def run_stage(
     - TEXT_BASE: 生成基础文本资产（标题、描述、标签）
     - COVER: 生成封面图片
     - MIX: 音频混音
+    - VO_SCRIPT: 生成 VO 脚本
+    - VO_GEN: 生成或解析 VO 音频
+    - VO_MIX: 将 VO 与音乐混音并生成 VO 时间轴
     - TEXT_SRT: 生成字幕文件（需要先完成 MIX）
     - RENDER: 视频渲染（需要先完成 COVER 和 MIX）
     
@@ -285,10 +288,21 @@ def run_stage(
     from ..assets.cover import generate_cover_for_episode
     from ..assets.mix import run_remix_for_episode
     from ..assets.render import run_render_for_episode
+    from ..pipelines.sg_vo_pipeline import (
+        stage_apply_sg_vo_mix,
+        stage_build_sg_music_mix,
+        stage_generate_sg_cover,
+        stage_generate_sg_text_base,
+        stage_generate_sg_text_srt,
+        stage_generate_sg_vo_audio,
+        stage_generate_sg_vo_script,
+        stage_init_sg_episode,
+        stage_render_sg_episode,
+    )
     
     # 解析阶段名称
     stage_name_upper = stage_name.upper()
-    stage_mapping = {
+    default_stage_mapping = {
         "INIT": (StageName.INIT, stage_init_episode),
         "TEXT_BASE": (StageName.TEXT_BASE, generate_text_base_assets),
         "COVER": (StageName.COVER, generate_cover_for_episode),
@@ -296,6 +310,18 @@ def run_stage(
         "TEXT_SRT": (StageName.TEXT_SRT, generate_text_srt),
         "RENDER": (StageName.RENDER, run_render_for_episode),
     }
+    sg_stage_mapping = {
+        "INIT": (StageName.INIT, stage_init_sg_episode),
+        "TEXT_BASE": (StageName.TEXT_BASE, stage_generate_sg_text_base),
+        "COVER": (StageName.COVER, stage_generate_sg_cover),
+        "MIX": (StageName.MIX, stage_build_sg_music_mix),
+        "VO_SCRIPT": (StageName.VO_SCRIPT, stage_generate_sg_vo_script),
+        "VO_GEN": (StageName.VO_GEN, stage_generate_sg_vo_audio),
+        "VO_MIX": (StageName.VO_MIX, stage_apply_sg_vo_mix),
+        "TEXT_SRT": (StageName.TEXT_SRT, stage_generate_sg_text_srt),
+        "RENDER": (StageName.RENDER, stage_render_sg_episode),
+    }
+    stage_mapping = sg_stage_mapping if channel_id == "sg" else default_stage_mapping
     
     if stage_name_upper not in stage_mapping:
         typer.echo(f"❌ 无效的阶段名称: {stage_name}")
@@ -319,7 +345,11 @@ def run_stage(
     typer.echo(f"运行阶段 {stage_name_upper} for {episode_id} (channel: {channel_id})...")
     
     try:
-        result = asyncio.run(stage_func(spec, paths))
+        maybe_result = stage_func(spec, paths)
+        if hasattr(maybe_result, "__await__"):
+            result = asyncio.run(maybe_result)
+        else:
+            result = maybe_result
         
         if result.success:
             typer.echo(f"✅ 阶段 {stage_name_upper} 完成: {episode_id}")
