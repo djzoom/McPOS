@@ -12,14 +12,13 @@ SG is a healing/ambient/sleep music channel:
 
 from __future__ import annotations
 
-import csv
+import asyncio
 import random
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
-from mcpos.core.channel import ChannelPlugin, ChannelConfig, register_channel
+from mcpos.core.channel import ChannelPlugin, register_channel
 from mcpos.models import EpisodeSpec, AssetPaths, StageResult, StageName, Track
 from mcpos.audio.catalog import scan_sg_library
 from mcpos.core.logging import log_info, log_warning, log_error
@@ -124,15 +123,16 @@ class SGPlugin(ChannelPlugin):
         Build SG mix using long crossfade (30s) between tracks via ffmpeg.
 
         Uses ffmpeg's acrossfade filter chained across all tracks.
-        Output: paths.final_mix_mp3 (MP3 320kbps)
+        Output: paths.music_mix_mp3 when available, otherwise paths.final_mix_mp3.
         """
         started_at = datetime.now()
+        mix_output = paths.music_mix_mp3 if getattr(paths, "music_mix_mp3", None) else paths.final_mix_mp3
 
-        if paths.final_mix_mp3.exists():
-            log_info(f"[sg] Mix already exists: {paths.final_mix_mp3}")
+        if mix_output.exists():
+            log_info(f"[sg] Mix already exists: {mix_output}")
             return StageResult(
                 stage=StageName.MIX, success=True,
-                duration_seconds=0.0, key_asset_paths=[paths.final_mix_mp3],
+                duration_seconds=0.0, key_asset_paths=[mix_output],
                 started_at=started_at, finished_at=datetime.now(),
             )
 
@@ -144,12 +144,12 @@ class SGPlugin(ChannelPlugin):
                 started_at=started_at, finished_at=datetime.now(),
             )
 
-        paths.final_mix_mp3.parent.mkdir(parents=True, exist_ok=True)
+        mix_output.parent.mkdir(parents=True, exist_ok=True)
 
         crossfade_sec = int(self.config.crossfade_sec)
 
         try:
-            output_path = self._build_crossfade_mix(tracks, paths.final_mix_mp3, crossfade_sec)
+            output_path = self._build_crossfade_mix(tracks, mix_output, crossfade_sec)
             finished_at = datetime.now()
             duration = (finished_at - started_at).total_seconds()
             log_info(f"[sg] Mix complete: {output_path} ({duration:.1f}s)")
@@ -340,22 +340,38 @@ class SGPlugin(ChannelPlugin):
     # Text generation
     # ------------------------------------------------------------------
 
-    def generate_text(self, spec: EpisodeSpec, paths: AssetPaths, tracks: list[Track]) -> StageResult:
+    async def generate_text_async(self, spec: EpisodeSpec, paths: AssetPaths, tracks: list[Track]) -> StageResult:
         """Generate YouTube title/description/tags via Claude API."""
-        import asyncio
         from mcpos.text.generator import generate_episode_text
 
-        started_at = datetime.now()
         try:
-            result = asyncio.get_event_loop().run_until_complete(
-                generate_episode_text(spec, paths, tracks)
-            )
-            return result
+            return await generate_episode_text(spec, paths, tracks)
         except Exception as e:
             log_error(f"[sg] generate_text failed: {e}")
             return StageResult(
                 stage=StageName.TEXT_BASE, success=False,
                 duration_seconds=0.0, key_asset_paths=[],
                 error_message=str(e),
-                started_at=started_at, finished_at=datetime.now(),
+                started_at=datetime.now(), finished_at=datetime.now(),
             )
+
+    def generate_text(self, spec: EpisodeSpec, paths: AssetPaths, tracks: list[Track]) -> StageResult:
+        """
+        Synchronous compatibility wrapper.
+
+        The formal SG pipeline awaits `generate_text_async()` directly.
+        """
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self.generate_text_async(spec, paths, tracks))
+
+        return StageResult(
+            stage=StageName.TEXT_BASE,
+            success=False,
+            duration_seconds=0.0,
+            key_asset_paths=[],
+            error_message="generate_text() cannot run inside an active event loop; await generate_text_async() instead",
+            started_at=datetime.now(),
+            finished_at=datetime.now(),
+        )

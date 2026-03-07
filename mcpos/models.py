@@ -4,34 +4,45 @@ McPOS 核心数据模型
 定义 McPOS 系统使用的所有核心数据模型，包括 EpisodeSpec、AssetPaths、EpisodeState 等。
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Optional, Dict, List, Literal
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
+from typing import Dict, Iterable, List, Literal, Optional
 
 
 class StageName(str, Enum):
     """
-    阶段名称枚举
+    阶段名称枚举。
 
-    Core stages (v1): INIT → TEXT_BASE → COVER → MIX → TEXT_SRT → RENDER
-    Post-production:  READY → UPLOADED → VERIFIED
+    Legacy core flow:
+      INIT -> TEXT_BASE -> COVER -> MIX -> TEXT_SRT -> RENDER
+
+    VO-aware flow for SG:
+      INIT -> TEXT_BASE -> COVER -> MIX -> VO_SCRIPT -> VO_GEN ->
+      VO_MIX -> TEXT_SRT -> RENDER
+
+    Post-production:
+      READY -> UPLOADED -> VERIFIED
     """
+
     INIT = "init"
-    TEXT_BASE = "text_base"  # Title, description, tags (depends on playlist.csv only)
-    COVER = "cover"          # Cover image (depends on playlist.csv only)
-    MIX = "mix"              # Audio mix (depends on playlist.csv only)
-    TEXT_SRT = "text_srt"    # Subtitles (depends on playlist.csv and timeline.csv)
-    RENDER = "render"        # Final video (depends on cover.png and final_mix.mp3)
-    READY = "ready"          # All core stages done, awaiting upload
-    UPLOADED = "uploaded"    # Successfully uploaded to YouTube
-    VERIFIED = "verified"    # Verified live on YouTube
+    TEXT_BASE = "text_base"
+    COVER = "cover"
+    MIX = "mix"
+    VO_SCRIPT = "vo_script"
+    VO_GEN = "vo_gen"
+    VO_MIX = "vo_mix"
+    TEXT_SRT = "text_srt"
+    RENDER = "render"
+    READY = "ready"
+    UPLOADED = "uploaded"
+    VERIFIED = "verified"
 
 
-# McPOS v1 核心阶段列表（用于完成度判断）
-# 外部脚本应使用 EpisodeState.is_core_complete() 而不是硬编码此列表
-CORE_STAGES = (
+LEGACY_CORE_STAGES: tuple[StageName, ...] = (
     StageName.INIT,
     StageName.TEXT_BASE,
     StageName.COVER,
@@ -40,6 +51,21 @@ CORE_STAGES = (
     StageName.RENDER,
 )
 
+SG_VO_CORE_STAGES: tuple[StageName, ...] = (
+    StageName.INIT,
+    StageName.TEXT_BASE,
+    StageName.COVER,
+    StageName.MIX,
+    StageName.VO_SCRIPT,
+    StageName.VO_GEN,
+    StageName.VO_MIX,
+    StageName.TEXT_SRT,
+    StageName.RENDER,
+)
+
+# Backward-compatible alias used by older code.
+CORE_STAGES = LEGACY_CORE_STAGES
+
 
 @dataclass
 class Track:
@@ -47,8 +73,9 @@ class Track:
     A single audio track from the library.
 
     BPM-aware fields are used by KAT/RBR channels.
-    SG fields are used by Sleep in Grace channel.
+    SG/CHL fields are used by healing / ambient channels.
     """
+
     path: Path
     title: str
     duration_sec: float
@@ -59,9 +86,9 @@ class Track:
     intro_silence_sec: float = 0.0
     outro_silence_sec: float = 0.0
 
-    # SG extensions
+    # SG / CHL extensions
     vocal_class: Optional[Literal["instrumental", "vocal"]] = None
-    song_intro_sec: Optional[float] = None   # seconds before first vocal
+    song_intro_sec: Optional[float] = None
     first_vocal_sec: Optional[float] = None
 
     def __str__(self) -> str:
@@ -71,105 +98,160 @@ class Track:
 @dataclass
 class EpisodeSpec:
     """
-    一期节目的抽象身份
-    
-    Interface Contract: Minimum fields are channel_id and episode_id.
+    一期节目的抽象身份。
+
+    Interface Contract: minimum fields are channel_id and episode_id.
     Future fields: date, slot, etc.
     """
+
     channel_id: str
     episode_id: str
-    date: Optional[str] = None              # YYYYMMDD format
+    date: Optional[str] = None
     side: Optional[str] = None
     theme: Optional[str] = None
     style: Optional[str] = None
-    duration_minutes: Optional[int] = None  # legacy field
-    target_bpm: Optional[int] = None        # None for SG (no BPM)
-    target_duration_min: Optional[int] = None  # target duration in minutes
+    duration_minutes: Optional[int] = None
+    target_bpm: Optional[int] = None
+    target_duration_min: Optional[int] = None
+
+
+def _channel_id_from_spec_or_str(spec_or_channel_id: EpisodeSpec | str) -> str:
+    if isinstance(spec_or_channel_id, EpisodeSpec):
+        return spec_or_channel_id.channel_id
+    return str(spec_or_channel_id)
+
+
+def _channel_has_vo_enabled(channel_id: str) -> bool:
+    if channel_id != "sg":
+        return False
+    try:
+        from .config import load_channel_config
+
+        channel_cfg = load_channel_config(channel_id)
+    except Exception:
+        return False
+    return bool(channel_cfg.extra.get("enable_vo", False))
+
+
+def get_required_stages(
+    spec_or_channel_id: EpisodeSpec | str,
+    *,
+    enable_vo: Optional[bool] = None,
+) -> tuple[StageName, ...]:
+    """Return required production stages for an episode or channel."""
+
+    channel_id = _channel_id_from_spec_or_str(spec_or_channel_id)
+    if enable_vo is None:
+        enable_vo = _channel_has_vo_enabled(channel_id)
+
+    if channel_id == "sg" and enable_vo:
+        return SG_VO_CORE_STAGES
+    return LEGACY_CORE_STAGES
 
 
 @dataclass
 class AssetPaths:
     """
-    一期节目的所有资产文件路径
-    
-    Interface Contract: Constructed from base_dir and EpisodeSpec.
-    All paths follow the asset naming contract in Dev_Bible.md.
-    
-    Key properties:
-    - Init: .playlist_csv, .recipe_json
-    - Mix: .final_mix_mp3 (MP3 格式, 256kbps, 48kHz, 用于渲染和归档), .timeline_csv
-    - Cover: .cover_png
-    - Text: .youtube_title_txt, .youtube_description_txt, .youtube_tags_txt, .youtube_srt
-    - Render: .youtube_mp4, .render_complete_flag
+    一期节目的所有资产文件路径。
+
+    Interface Contract: constructed from base_dir and EpisodeSpec.
+    All paths follow the asset naming contract.
     """
+
     episode_output_dir: Path
-    
-    # Init 阶段
+
+    # INIT
     playlist_csv: Path
     recipe_json: Path
-    
-    # Mix 阶段
-    final_mix_mp3: Path     # 混音音频（MP3 格式, 256 kbps, 48 kHz，用于渲染和归档）
+
+    # MIX / audio
+    music_mix_mp3: Path
+    final_mix_mp3: Path
     timeline_csv: Path
-    
-    # Cover 阶段
+    audio_ducking_map: Path
+    ducking_meta_json: Path
+
+    # VO
+    vo_intro_mp3: Path
+    vo_outro_mp3: Path
+    vo_full_mp3: Path
+    vo_timeline_csv: Path
+    vo_srt: Path
+    vo_script_txt: Path
+    vo_script_ssml: Path
+    vo_script_meta_json: Path
+    vo_gen_meta_json: Path
+    vo_normalize_meta_json: Path
+
+    # COVER / TEXT
     cover_png: Path
-    
-    # Text 阶段
     youtube_title_txt: Path
     youtube_description_txt: Path
     youtube_tags_txt: Path
     youtube_srt: Path
-    
-    # Render 阶段
+
+    # RENDER / UPLOAD / VERIFY
     youtube_mp4: Path
     render_complete_flag: Path
-    
-    # Upload/Verify 阶段
     upload_complete_flag: Path
     verify_complete_flag: Path
-    
-    # 临时文件目录
+
+    # TEMP
     tmp_dir: Path
-    
+
     @classmethod
-    def from_episode_spec(
-        cls,
-        spec: EpisodeSpec,
-        channels_root: Path,
-    ) -> "AssetPaths":
-        """
-        根据 EpisodeSpec 构建 AssetPaths
-        
-        根据文档第五章的命名规则：
-        - 输出目录: channels/<channel_id>/output/<episode_id>/
-        - 文件名遵循规范，以 episode_id 为前缀（除 playlist.csv 和 recipe.json）
-        """
+    def from_episode_spec(cls, spec: EpisodeSpec, channels_root: Path) -> "AssetPaths":
         episode_output_dir = channels_root / spec.channel_id / "output" / spec.episode_id
+        return cls.from_output_dir(episode_output_dir, spec.episode_id)
+
+    @classmethod
+    def from_output_dir(cls, episode_output_dir: Path, episode_id: Optional[str] = None) -> "AssetPaths":
+        episode_output_dir = Path(episode_output_dir)
+        eid = episode_id or episode_output_dir.name
         tmp_dir = episode_output_dir / "tmp"
-        
         return cls(
             episode_output_dir=episode_output_dir,
             playlist_csv=episode_output_dir / "playlist.csv",
             recipe_json=episode_output_dir / "recipe.json",
-            final_mix_mp3=episode_output_dir / f"{spec.episode_id}_final_mix.mp3",  # MP3 格式，256 kbps, 48 kHz（用于渲染和归档）
-            timeline_csv=episode_output_dir / f"{spec.episode_id}_final_mix_timeline.csv",  # 时间轴文件（对应 final_mix_mp3）
-            cover_png=episode_output_dir / f"{spec.episode_id}_cover.png",
-            youtube_title_txt=episode_output_dir / f"{spec.episode_id}_youtube_title.txt",
-            youtube_description_txt=episode_output_dir / f"{spec.episode_id}_youtube_description.txt",
-            youtube_tags_txt=episode_output_dir / f"{spec.episode_id}_youtube_tags.txt",
-            youtube_srt=episode_output_dir / f"{spec.episode_id}_youtube.srt",
-            youtube_mp4=episode_output_dir / f"{spec.episode_id}_youtube.mp4",
-            render_complete_flag=episode_output_dir / f"{spec.episode_id}_render_complete.flag",
-            upload_complete_flag=episode_output_dir / f"{spec.episode_id}_upload_complete.flag",
-            verify_complete_flag=episode_output_dir / f"{spec.episode_id}_verify_complete.flag",
+            music_mix_mp3=episode_output_dir / f"{eid}_music_mix.mp3",
+            final_mix_mp3=episode_output_dir / f"{eid}_final_mix.mp3",
+            timeline_csv=episode_output_dir / f"{eid}_final_mix_timeline.csv",
+            audio_ducking_map=episode_output_dir / f"{eid}_audio_ducking_map.csv",
+            ducking_meta_json=episode_output_dir / f"{eid}_ducking_meta.json",
+            vo_intro_mp3=episode_output_dir / f"{eid}_vo_intro.mp3",
+            vo_outro_mp3=episode_output_dir / f"{eid}_vo_outro.mp3",
+            vo_full_mp3=episode_output_dir / f"{eid}_vo_full.mp3",
+            vo_timeline_csv=episode_output_dir / f"{eid}_vo_timeline.csv",
+            vo_srt=episode_output_dir / f"{eid}_vo.srt",
+            vo_script_txt=episode_output_dir / f"{eid}_vo_script.txt",
+            vo_script_ssml=episode_output_dir / f"{eid}_vo_script.ssml",
+            vo_script_meta_json=episode_output_dir / f"{eid}_vo_script_meta.json",
+            vo_gen_meta_json=episode_output_dir / f"{eid}_vo_gen_meta.json",
+            vo_normalize_meta_json=episode_output_dir / f"{eid}_vo_normalize_meta.json",
+            cover_png=episode_output_dir / f"{eid}_cover.png",
+            youtube_title_txt=episode_output_dir / f"{eid}_youtube_title.txt",
+            youtube_description_txt=episode_output_dir / f"{eid}_youtube_description.txt",
+            youtube_tags_txt=episode_output_dir / f"{eid}_youtube_tags.txt",
+            youtube_srt=episode_output_dir / f"{eid}_youtube.srt",
+            youtube_mp4=episode_output_dir / f"{eid}_youtube.mp4",
+            render_complete_flag=episode_output_dir / f"{eid}_render_complete.flag",
+            upload_complete_flag=episode_output_dir / f"{eid}_upload_complete.flag",
+            verify_complete_flag=episode_output_dir / f"{eid}_verify_complete.flag",
             tmp_dir=tmp_dir,
         )
+
+    def iter_key_paths(self) -> Iterable[Path]:
+        """Return all file-like asset paths for introspection/debugging."""
+
+        for value in self.__dict__.values():
+            if isinstance(value, Path):
+                yield value
 
 
 @dataclass
 class StageResult:
-    """某一阶段的执行结果"""
+    """某一阶段的执行结果。"""
+
     stage: StageName
     success: bool
     duration_seconds: float
@@ -182,54 +264,42 @@ class StageResult:
 @dataclass
 class EpisodeState:
     """
-    一期节目的推导状态快照
-    
-    注意：
-    - 真相来源是文件系统，EpisodeState 是一次检测时的快照，不是独立的持久状态
-    - 通过 detect_episode_state_from_filesystem() 从文件系统推导生成
-    - v1 只包含六个核心阶段（INIT, TEXT_BASE, COVER, MIX, TEXT_SRT, RENDER）
+    一期节目的推导状态快照。
+
+    真相来源是文件系统；EpisodeState 是一次检测时的快照。
     """
+
     episode_id: str
     channel_id: str
-    date: str
+    date: Optional[str]
     current_stage: Optional[StageName] = None
-    stage_completed: Dict[StageName, bool] = None
-    upload_status: Optional[str] = None  # "pending", "uploaded", "verified", "failed" (future use)
+    stage_completed: Optional[Dict[StageName, bool]] = None
+    required_stages: Optional[tuple[StageName, ...]] = None
+    upload_status: Optional[str] = None
     error_message: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    
-    def __post_init__(self):
-        """初始化默认值"""
+
+    def __post_init__(self) -> None:
         if self.stage_completed is None:
             self.stage_completed = {stage: False for stage in StageName}
+        else:
+            for stage in StageName:
+                self.stage_completed.setdefault(stage, False)
+
+        if self.required_stages is None:
+            self.required_stages = get_required_stages(self.channel_id)
         if self.created_at is None:
             self.created_at = datetime.now()
         if self.updated_at is None:
             self.updated_at = datetime.now()
-    
+
     def is_core_complete(self) -> bool:
-        """
-        检查所有核心阶段是否完成（McPOS v1 的六个阶段）
-        
-        Returns:
-            True if all core stages (INIT, TEXT_BASE, COVER, MIX, TEXT_SRT, RENDER) are completed
-        
-        Note:
-            This method checks only v1 core stages. Future stages (UPLOAD, VERIFY) are not included.
-        """
-        return all(self.stage_completed.get(stage, False) for stage in CORE_STAGES)
-    
+        return all(self.stage_completed.get(stage, False) for stage in (self.required_stages or CORE_STAGES))
+
     def is_render_complete(self) -> bool:
-        """
-        检查渲染阶段是否完成
-        
-        Returns:
-            True if RENDER stage is completed
-        
-        Note:
-            This is a convenience method for checking render completion specifically,
-            separate from overall core completion.
-        """
         return self.stage_completed.get(StageName.RENDER, False)
+
+    def completed_required_stages(self) -> list[StageName]:
+        return [stage for stage in (self.required_stages or CORE_STAGES) if self.stage_completed.get(stage, False)]
 

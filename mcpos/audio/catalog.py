@@ -233,16 +233,16 @@ def scan_library(
 
     Dispatches to the appropriate scanner based on channel_id:
     - "kat" / "rbr": scan_bpm_library(library_root, cache_csv=...)
-    - "sg": scan_sg_library(library_root, vocal_root=..., catalog_csv=...)
+    - "sg" / "chl": scan_sg_library(library_root, vocal_root=..., catalog_csv=...)
 
     Extra kwargs are forwarded to the specific scanner.
     """
     if channel_id in ("kat", "rbr"):
         return scan_bpm_library(library_root, **kwargs)
-    elif channel_id == "sg":
+    elif channel_id in ("sg", "chl"):
         return scan_sg_library(library_root, **kwargs)
     else:
-        raise ValueError(f"Unknown channel_id '{channel_id}'. Expected 'kat', 'rbr', or 'sg'.")
+        raise ValueError(f"Unknown channel_id '{channel_id}'. Expected 'kat', 'rbr', 'sg', or 'chl'.")
 
 
 # ---------------------------------------------------------------------------

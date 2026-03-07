@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 from datetime import datetime
 
-from ..models import EpisodeSpec, AssetPaths, EpisodeState, StageName
+from ..models import EpisodeSpec, AssetPaths, EpisodeState, StageName, get_required_stages
 from ..config import get_config
 from ..core.logging import log_info, log_warning, log_error
 
@@ -29,6 +29,11 @@ def build_asset_paths(spec: EpisodeSpec, config=None) -> AssetPaths:
         config = get_config()
     
     return AssetPaths.from_episode_spec(spec, config.channels_root)
+
+
+def build_asset_paths_from_output_dir(output_dir: Path, episode_id: str | None = None) -> AssetPaths:
+    """Build AssetPaths from an existing episode output directory."""
+    return AssetPaths.from_output_dir(output_dir, episode_id=episode_id)
 
 
 def check_asset_exists(asset_path: Path | None) -> bool:
@@ -197,9 +202,15 @@ def detect_episode_state_from_filesystem(spec: EpisodeSpec, asset_paths: AssetPa
     if asset_paths is None:
         config = get_config()
         asset_paths = build_asset_paths(spec, config)
-    
-    # 检查各阶段文件是否存在（v1 只包含六个核心阶段）
-    stage_completed = {
+
+    required_stages = get_required_stages(spec)
+
+    mix_complete = asset_paths.timeline_csv.exists() and (
+        asset_paths.music_mix_mp3.exists() or asset_paths.final_mix_mp3.exists()
+    )
+
+    stage_completed = {stage: False for stage in StageName}
+    stage_completed.update({
         StageName.INIT: (
             asset_paths.playlist_csv.exists() and
             asset_paths.recipe_json.exists()
@@ -210,41 +221,56 @@ def detect_episode_state_from_filesystem(spec: EpisodeSpec, asset_paths: AssetPa
             asset_paths.youtube_tags_txt.exists()
         ),
         StageName.COVER: asset_paths.cover_png.exists(),
-        StageName.MIX: asset_paths.final_mix_mp3.exists() and asset_paths.timeline_csv.exists(),
+        StageName.MIX: mix_complete,
+        StageName.VO_SCRIPT: (
+            asset_paths.vo_script_txt.exists() and
+            asset_paths.vo_script_ssml.exists() and
+            asset_paths.vo_script_meta_json.exists()
+        ),
+        StageName.VO_GEN: asset_paths.vo_gen_meta_json.exists(),
+        StageName.VO_MIX: (
+            asset_paths.final_mix_mp3.exists() and
+            asset_paths.vo_timeline_csv.exists() and
+            asset_paths.audio_ducking_map.exists()
+        ),
         StageName.TEXT_SRT: asset_paths.youtube_srt.exists(),
         StageName.RENDER: asset_paths.youtube_mp4.exists() and asset_paths.render_complete_flag.exists(),
-        # Note: UPLOAD and VERIFY are not in v1, will be added in future versions
-    }
-    
+        StageName.UPLOADED: asset_paths.upload_complete_flag.exists(),
+        StageName.VERIFIED: asset_paths.verify_complete_flag.exists(),
+    })
+    stage_completed[StageName.READY] = all(stage_completed.get(stage, False) for stage in required_stages)
+
     current_stage = None
-    # Check stages in dependency order: INIT → (TEXT_BASE || COVER) → MIX → TEXT_SRT → RENDER
-    # 特殊处理：如果 youtube_mp4 存在但 render_complete_flag 不存在，说明正在渲染
     is_rendering = asset_paths.youtube_mp4.exists() and not asset_paths.render_complete_flag.exists()
-    
-    if stage_completed[StageName.INIT]:
-        current_stage = StageName.INIT
-        if stage_completed[StageName.TEXT_BASE] or stage_completed[StageName.COVER]:
-            current_stage = StageName.TEXT_BASE if stage_completed[StageName.TEXT_BASE] else StageName.COVER
-            if stage_completed[StageName.MIX]:
-                current_stage = StageName.MIX
-                if stage_completed[StageName.TEXT_SRT]:
-                    current_stage = StageName.TEXT_SRT
-                    # 如果正在渲染（youtube_mp4 存在但 flag 不存在），优先显示 RENDER
-                    if is_rendering:
-                        current_stage = StageName.RENDER
-                    elif stage_completed[StageName.RENDER]:
-                        current_stage = StageName.RENDER
-                        # Note: UPLOAD and VERIFY are not in v1, will be added in future versions
-                # 如果 MIX 完成但 TEXT_SRT 未完成，但正在渲染，也应该显示 RENDER
-                elif is_rendering:
-                    current_stage = StageName.RENDER
-    
+
+    if stage_completed[StageName.VERIFIED]:
+        current_stage = StageName.VERIFIED
+    elif stage_completed[StageName.UPLOADED]:
+        current_stage = StageName.VERIFIED
+    elif stage_completed[StageName.READY]:
+        current_stage = StageName.READY
+    elif is_rendering:
+        current_stage = StageName.RENDER
+    else:
+        for stage in required_stages:
+            if not stage_completed.get(stage, False):
+                current_stage = stage
+                break
+
+    upload_status = "verified" if stage_completed[StageName.VERIFIED] else (
+        "uploaded" if stage_completed[StageName.UPLOADED] else (
+            "ready" if stage_completed[StageName.READY] else "pending"
+        )
+    )
+
     return EpisodeState(
         episode_id=spec.episode_id,
         channel_id=spec.channel_id,
         date=spec.date,
         current_stage=current_stage,
         stage_completed=stage_completed,
+        required_stages=required_stages,
+        upload_status=upload_status,
         error_message=None,
         created_at=datetime.now(),
         updated_at=datetime.now(),
