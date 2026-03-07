@@ -1,0 +1,23 @@
+# KAT channel configuration — Kat Records Studio
+channel_id: kat
+name: "Kat Records Studio"
+
+# Library (symlink → ~/Studio/Library/kat/songs)
+library_root: "~/Studio/Library/kat/songs"
+assets_root: "~/Studio/Library/kat/assets"
+images_pool: "~/Studio/Library/kat/images/available"
+
+# YouTube
+youtube_channel_id: "UCbLYx6UscJjfZ7Ch9U53nRg"
+youtube_playlist_id: null
+
+# Audio production
+target_bpm: 170
+target_duration_min: 180
+crossfade_sec: 8.0
+vinyl_sfx: true
+
+# Scheduling
+timezone: "UTC+7"
+publish_time_local: "23:00"
+daily_quota_budget: 3000

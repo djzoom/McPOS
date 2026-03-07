@@ -1,0 +1,23 @@
+# RBR channel configuration — Run Baby Run
+channel_id: rbr
+name: "Run Baby Run"
+
+# Library
+library_root: "~/Studio/Library/rbr/songs"
+assets_root: "~/Studio/Library/rbr/assets"
+
+# YouTube
+youtube_channel_id: null
+youtube_playlist_id: null
+
+# Audio production
+target_bpm: 170        # default; override per episode
+target_duration_min: 180
+crossfade_sec: 4.0
+vinyl_sfx: false
+bpm_tolerance: 5       # ±5 BPM for track selection
+
+# Scheduling
+timezone: "UTC"
+publish_time_local: "08:00"
+daily_quota_budget: 3000
