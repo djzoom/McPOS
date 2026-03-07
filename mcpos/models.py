@@ -6,7 +6,7 @@ McPOS 核心数据模型
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Literal
 from datetime import datetime
 from enum import Enum
 
@@ -14,13 +14,9 @@ from enum import Enum
 class StageName(str, Enum):
     """
     阶段名称枚举
-    
-    McPOS v1 recognizes exactly six stages: init, text_base, cover, mix, text_srt, render.
-    Upload and verify are future stages, not part of v1. They will be added as separate
-    enums or state fields in future versions.
-    
-    Note: TEXT is split into TEXT_BASE (title/description/tags, depends only on playlist.csv)
-    and TEXT_SRT (subtitles, depends on playlist.csv and timeline.csv from MIX).
+
+    Core stages (v1): INIT → TEXT_BASE → COVER → MIX → TEXT_SRT → RENDER
+    Post-production:  READY → UPLOADED → VERIFIED
     """
     INIT = "init"
     TEXT_BASE = "text_base"  # Title, description, tags (depends on playlist.csv only)
@@ -28,7 +24,9 @@ class StageName(str, Enum):
     MIX = "mix"              # Audio mix (depends on playlist.csv only)
     TEXT_SRT = "text_srt"    # Subtitles (depends on playlist.csv and timeline.csv)
     RENDER = "render"        # Final video (depends on cover.png and final_mix.mp3)
-    # Note: UPLOAD and VERIFY are not in v1. They will be added in future versions.
+    READY = "ready"          # All core stages done, awaiting upload
+    UPLOADED = "uploaded"    # Successfully uploaded to YouTube
+    VERIFIED = "verified"    # Verified live on YouTube
 
 
 # McPOS v1 核心阶段列表（用于完成度判断）
@@ -44,6 +42,33 @@ CORE_STAGES = (
 
 
 @dataclass
+class Track:
+    """
+    A single audio track from the library.
+
+    BPM-aware fields are used by KAT/RBR channels.
+    SG fields are used by Sleep in Grace channel.
+    """
+    path: Path
+    title: str
+    duration_sec: float
+
+    # BPM-aware (KAT / RBR)
+    bpm: Optional[float] = None
+    bpm_confidence: Optional[float] = None
+    intro_silence_sec: float = 0.0
+    outro_silence_sec: float = 0.0
+
+    # SG extensions
+    vocal_class: Optional[Literal["instrumental", "vocal"]] = None
+    song_intro_sec: Optional[float] = None   # seconds before first vocal
+    first_vocal_sec: Optional[float] = None
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.duration_sec:.0f}s)"
+
+
+@dataclass
 class EpisodeSpec:
     """
     一期节目的抽象身份
@@ -53,11 +78,13 @@ class EpisodeSpec:
     """
     channel_id: str
     episode_id: str
-    date: Optional[str] = None  # Optional: YYYYMMDD format or similar
-    side: Optional[str] = None  # Optional: A/B side
-    theme: Optional[str] = None  # Optional: theme
-    style: Optional[str] = None  # Optional: style
-    duration_minutes: Optional[int] = None  # Optional: duration in minutes
+    date: Optional[str] = None              # YYYYMMDD format
+    side: Optional[str] = None
+    theme: Optional[str] = None
+    style: Optional[str] = None
+    duration_minutes: Optional[int] = None  # legacy field
+    target_bpm: Optional[int] = None        # None for SG (no BPM)
+    target_duration_min: Optional[int] = None  # target duration in minutes
 
 
 @dataclass

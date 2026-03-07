@@ -1,0 +1,25 @@
+# SG channel configuration — Sleep in Grace
+channel_id: sg
+name: "Sleep in Grace"
+
+# Library
+library_root: "~/Studio/Library/sg/songs/instrumental"
+vocal_library: "~/Studio/Library/sg/songs/vocal"
+assets_root: "~/Studio/Library/sg/assets"
+catalog_csv: "~/Studio/Library/sg/catalog/classification_results.csv"
+
+# YouTube
+youtube_channel_id: null
+youtube_playlist_id: null
+
+# Audio production
+target_bpm: null           # No BPM for ambient/healing
+target_duration_min: 360   # 6-hour sessions default
+crossfade_sec: 30.0        # Long crossfade for ambient
+vocal_mix_ratio: 0.05      # 5% vocal tracks in mix
+instrumental_preferred: true
+
+# Scheduling
+timezone: "UTC"
+publish_time_local: "06:00"
+daily_quota_budget: 3000

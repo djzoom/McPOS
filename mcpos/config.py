@@ -114,6 +114,69 @@ def set_config(config: McPOSConfig) -> None:
     _config = config
 
 
+def load_channel_config(channel_id: str, config: Optional["McPOSConfig"] = None) -> "ChannelConfig":
+    """
+    Load per-channel configuration from channels/<id>/config/config.yaml.
+
+    Returns a ChannelConfig object populated from the YAML file.
+    Falls back to sensible defaults if the file is missing.
+    """
+    from .core.channel import ChannelConfig  # avoid circular import at module level
+    import json
+
+    if config is None:
+        config = get_config()
+
+    channel_dir = config.channels_root / channel_id
+    yaml_path = channel_dir / "config" / "config.yaml"
+    json_path = channel_dir / "config" / "channel.json"
+
+    data: dict = {}
+
+    # Load JSON profile (name, youtube metadata)
+    if json_path.exists():
+        try:
+            data.update(json.loads(json_path.read_text(encoding="utf-8")))
+        except Exception:
+            pass
+
+    # Load YAML config (overrides JSON, has production params)
+    if yaml_path.exists():
+        try:
+            import yaml
+            yaml_data = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+            data.update(yaml_data)
+        except ImportError:
+            pass
+        except Exception:
+            pass
+
+    def _resolve_path(key: str, default: Path) -> Path:
+        val = data.get(key, "")
+        return Path(val).expanduser() if val else default
+
+    library_root = _resolve_path("library_root", channel_dir / "library" / "songs")
+    assets_root = _resolve_path("assets_root", channel_dir / "assets")
+    credentials_dir = channel_dir / "credentials"
+
+    return ChannelConfig(
+        channel_id=channel_id,
+        channel_name=data.get("name", data.get("channel_name", channel_id)),
+        library_root=library_root,
+        assets_root=assets_root,
+        youtube_channel_id=data.get("youtube_channel_id"),
+        youtube_playlist_id=data.get("youtube_playlist_id"),
+        credentials_dir=credentials_dir,
+        target_bpm=data.get("target_bpm"),
+        target_duration_min=int(data.get("target_duration_min", 180)),
+        crossfade_sec=float(data.get("crossfade_sec", 8.0)),
+        timezone=data.get("timezone", "UTC"),
+        publish_time_local=data.get("publish_time_local", "23:00"),
+        daily_quota_budget=int(data.get("daily_quota_budget", 3000)),
+        extra=data,
+    )
+
+
 def get_openai_api_key() -> Optional[str]:
     """
     获取 OpenAI API Key
