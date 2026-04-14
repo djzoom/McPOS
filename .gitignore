@@ -97,6 +97,7 @@ logs/
 .cursor_sync/
 
 # Project-specific generated/runtime files
+channels/*/output
 channels/*/output/
 channels/*/data/
 *.db
