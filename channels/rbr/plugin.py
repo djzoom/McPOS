@@ -24,7 +24,7 @@ from mcpos.audio.catalog import scan_bpm_library
 from mcpos.core.logging import log_info, log_warning, log_error
 
 # Path to RunBabyRun repo
-RBR_REPO = Path("~/Downloads/RunBabyRun/code").expanduser()
+RBR_REPO = Path("~/Studio/RunBabyRun/code").expanduser()
 
 
 @register_channel
