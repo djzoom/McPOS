@@ -162,7 +162,14 @@ def main() -> int:
                 continue
             x["t_start"], x["t_end"] = t0, t1
             x["duration_was"] = dur
-            x["duration_sec"] = round(t1 - t0, 3)
+            # 时长以**修剪后的文件**为准,不是母带跨度 t1−t0。两者本会因
+            # mp3 帧粒度差几十毫秒;而一旦哪天导出失败退回跨度,就是
+            # 2026-08-11 那 222 条(最大差 7.66s)的翻版。探不出就不改时长,
+            # 让 audit_atom_edges 去发现,不猜。
+            real = hw.probe_duration(p)
+            x["duration_sec"] = round(real, 3) if real else round(t1 - t0, 3)
+            if not real:
+                print(f"  ⚠ 修剪后时长探测失败,暂记母带跨度: {x['id']}")
             x["trimmed_at"] = datetime.now(timezone.utc).isoformat()
         trimmed += 1
         n = len(words(x["text"]))

@@ -91,16 +91,7 @@ DECAY = 0.55        # 击打拖尾时间常数(秒)
 STRIKE_LEN = 2.4    # 拖尾总长(秒)
 
 
-def probe_duration(path: Path) -> float:
-    """媒体时长(秒)。读不出来返回 0.0,让调用方自己决定怎么处理。"""
-    r = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=nw=1:nk=1", str(path)],
-        capture_output=True, text=True)
-    try:
-        return float(r.stdout.strip())
-    except ValueError:
-        return 0.0
+from sg_media import probe_duration, probe_duration_or_die  # noqa: E402
 
 
 def speech_onsets(vo: Path, floor_db: int = -45, min_sil: float = 0.45) -> list[float]:
@@ -301,7 +292,9 @@ def main() -> int:
     # --seconds 0 = 整期。长度取自 final_mix 而不是 session.json 的
     # total_duration_sec:成品轨才是要配的那条,元数据是编排时的估算(两者曾差近两分钟)。
     if a.seconds <= 0:
-        a.seconds = max(0.0, probe_duration(mix) - a.start)
+        # 读不出成品时长就**停下来**:按 0 秒渲出来的是一个空文件,
+        # 而空文件在 release_gate 的 R1/R7 之前不会有人发现。
+        a.seconds = max(0.0, probe_duration_or_die(mix, "final_mix") - a.start)
         print(f"整期模式:{a.seconds/60:.1f} min（{mix.name}）")
         if a.out is None:
             out = D / f"{a.session}_rings.mp4"
@@ -338,9 +331,21 @@ def main() -> int:
 
     # 字幕:用 plan 里的 vo_start_sec / vo_end_sec —— 那是成品轨上的真实位置。
     # plan 的 start_sec 是编排估算,与成品差近两分钟,拿去打字幕会整体错位。
-    subs = [(float(p["vo_start_sec"]), float(p["vo_end_sec"]), p.get("text") or "")
-            for p in plan if p.get("type") == "atom"
-            and p.get("vo_start_sec") is not None]
+    # 排版修正必须与 .srt 用**同一个函数**:烧进画面的字与外挂字幕是同一句话,
+    # 两处各自处理必然分头演化,观众就会看到片里写 "Tonight"、字幕文件写 "tonight"。
+    from build_session import subtitle_typography
+    plan_atoms = [p for p in plan if p.get("type") == "atom"]
+    subs = []
+    for i, p in enumerate(plan_atoms):
+        if p.get("vo_start_sec") is None:
+            continue
+        prev = plan_atoms[i - 1] if i else None
+        cont = bool(prev
+                    and prev.get("source_master") == p.get("source_master")
+                    and int(p.get("source_sequence_index", -1))
+                    == int(prev.get("source_sequence_index", -2)) + 1)
+        subs.append((float(p["vo_start_sec"]), float(p["vo_end_sec"]),
+                     subtitle_typography(p.get("text") or "", continues_prev=cont)))
     font = load_font(SUB_SIZE)
     print(f"  字幕 {len(subs)} 条" + ("" if subs else "  ⚠️ plan 里没有 vo_start_sec,请用新版 build_session 重出"))
 

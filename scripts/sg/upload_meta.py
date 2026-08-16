@@ -32,7 +32,14 @@ CATEGORY_MUSIC = "10"
 # ---------------------------------------------------------------- 真源:逐期定稿标题
 # YouTube 硬限 100 字符;SEO 前置关键词;不用句号(照 Kat/RBR 家规)。
 EPISODE_TITLES = {
-    1: "Sleep in Grace 🕊 1 Hour Christian Bedtime Prayer & Sacred Rest | Fall Asleep in God's Presence",
+    1: "Safety is His to give — Psalm 4:8 | 18 Minutes Christian Night Prayer for Sleep · No. 001",
+    2: "Someone is awake, so you — Psalm 121:4 | 18 Minutes Christian Night Prayer for Sleep · No. 002",
+    3: "Lay it down; the day is complete | 21 Minutes Christian Night Prayer for Sleep · No. 003",
+    4: "Rest is offered. You have — Matthew 11:28 | 18 Minutes Christian Night Prayer for Sleep · No. 004",
+    5: "Sleep is a gift, not a wage — Psalm 127:2 | 30 Minutes Christian Night Prayer for Sleep · No. 005",
+    6: "The night has a limit. — Psalm 30:5 | 30 Minutes Christian Night Prayer for Sleep · No. 006",
+    7: "Fear can be handed over — Psalm 34:4 | 30 Minutes Christian Night Prayer for Sleep · No. 007",
+    8: "Rest is not earned, it is given | 30 Minutes Christian Night Prayer for Sleep · No. 008",
 }
 
 TITLE_TEMPLATE = ("Sleep in Grace 🕊 {minutes_h} Christian Bedtime Prayer & "

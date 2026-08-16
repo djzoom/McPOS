@@ -95,7 +95,11 @@ def refs_in_plan(plan: list[dict]) -> collections.Counter:
         if p.get("type") != "atom":
             continue
         t = p.get("text") or ""
-        for m in re.finditer(rf"\b({BOOKS})\b[\s,]*([^.;!?]{{0,42}})", t, re.I):
+        # 后捕获组必须允许句点:「Psalm 46.10 says」的点分章节若被 [^.;!?]
+        # 在点处截断,只剩章号 46,查不到策展全文 —— Ep2/3/8 批量生成时
+        # 就是这样整期失败的。数字间的点是章节分隔,句末的点后面跟不上
+        # 数字,dotted 解析自然放过,不会吃进下一句。
+        for m in re.finditer(rf"\b({BOOKS})\b[\s,]*([^;!?]{{0,42}})", t, re.I):
             book = (m.group(1).title().rstrip("s")
                     if m.group(1).lower().startswith("psalm") else m.group(1).title())
             # 章与节是**两组**数字,必须按分隔符切开再各自合成。
@@ -116,6 +120,16 @@ def refs_in_plan(plan: list[dict]) -> collections.Counter:
                     groups.append(n)
             if not groups:
                 continue
+            # 逐位念的指纹:「Psalm 1, 2, 1, 1 and 2」是朗读者把 121:1-2
+            # 拆成单个数字念,whisper 逐位转写。按原样取首二组会得出
+            # 「Psalph 1:2」这种凭空出处。≥4 组且全是个位数时,先试
+            # 前三位、再试前两位拼成合法章号(诗篇 100–150 都是三位)。
+            if len(groups) >= 4 and all(g < 10 for g in groups):
+                for k in (3, 2):
+                    joined = int("".join(str(g) for g in groups[:k]))
+                    if 100 <= joined <= 150 or (k == 2 and 10 <= joined <= 99):
+                        groups = [joined] + groups[k:]
+                        break
             ch, vs = groups[0], (groups[1] if len(groups) > 1 else None)
             if not (1 <= ch <= 176):            # 诗篇最多 150 章,留点余量
                 continue
@@ -125,17 +139,28 @@ def refs_in_plan(plan: list[dict]) -> collections.Counter:
     return found
 
 
-def pick_primary(found: collections.Counter, table: list[dict]) -> dict | None:
-    """优先选**能在策展表里找到全文**的那一处 —— 简介里要引原文。"""
+def pick_primary(found: collections.Counter, table: list[dict],
+                 avoid: set[str] = frozenset()) -> dict | None:
+    """优先选**能在策展表里找到全文**的那一处 —— 简介里要引原文。
+
+    avoid 传近期已当过题眼的出处:同一节经文连着两期做标题,频道页看起来
+    像复读。避不开(本期只念了这一处)时仍用它 —— 内容真实优先于排面。
+    """
     by_ref = {s["ref"]: s for s in table}
+    hits: list[dict] = []
     for ref, _ in found.most_common():
         if ref in by_ref:
-            return by_ref[ref]
+            hits.append(by_ref[ref])
+            continue
         chapter = ref.split(":")[0]
         for k, s in by_ref.items():
             if k.startswith(chapter + ":"):
-                return s
-    return None
+                hits.append(s)
+                break
+    for h in hits:
+        if h["ref"] not in avoid:
+            return h
+    return hits[0] if hits else None
 
 
 def duration_label(sec: float) -> str:
@@ -154,6 +179,9 @@ def main() -> int:
     ap.add_argument("--session", required=True)
     ap.add_argument("--episode", type=int)
     ap.add_argument("--write", action="store_true", help="写入 <session>_meta.txt")
+    ap.add_argument("--avoid-ref", action="append", default=[],
+                    help="近期已作题眼的出处(可多次);批量生成时逐期累积传入,"
+                         "避免频道页连排同一节经文")
     a = ap.parse_args()
 
     D = SESSIONS / a.session
@@ -163,15 +191,30 @@ def main() -> int:
 
     table = load_scriptures()
     found = refs_in_plan(plan)
-    primary = pick_primary(found, table)
+    primary = pick_primary(found, table, avoid=set(a.avoid_ref))
 
     print(f"=== {a.session} ===")
     print(f"时长 {total/60:.0f} 分钟 · 原子 {sum(1 for p in plan if p.get('type')=='atom')} 条")
     print(f"检出经文 {len(found)} 处:{', '.join(k for k,_ in found.most_common(8))}")
     if not primary:
-        print("\n⚠️ 没有一处能在策展表里找到全文 —— 标题无法引原文。")
-        print("   要么补策展表,要么这一期不该以经文为题。")
-        return 1
+        # 优雅降级,不再整期失败:批量发 8 期时,一期卡住会把整个排播拖停。
+        # 无策展全文就不引原文,以主题句作题眼 —— 仍然诚实(不冒充引文),
+        # 期号轮换避免同题。
+        dur = duration_label(total)
+        ep = f" · No. {a.episode:03d}" if a.episode else ""
+        fallback_hooks = [
+            "Rest is not earned, it is given",
+            "The night belongs to God, not to worry",
+            "You can stop now — He stays awake",
+            "Lay it down; the day is complete",
+        ]
+        head = fallback_hooks[(a.episode or 1) % len(fallback_hooks)]
+        title = f"{head} | {dur} Christian Night Prayer for Sleep{ep}"
+        print("\n⚠️ 无策展全文可引 —— 使用主题题眼(不冒充引文):")
+        print(f"\nTITLE\n{title}")
+        print(f"\n标题长度 {len(title)} 字符")
+        print("   如需以经文为题:补策展表(shorts_copy.SCRIPTURES)后重跑。")
+        return 0
 
     dur = duration_label(total)
     # 标题必须 ≤100 字符,否则 YouTube 截断 —— 被截掉的往往正是品牌与期号。
@@ -182,7 +225,16 @@ def main() -> int:
     title = f"{head} — {primary['ref']} | {dur} Christian Night Prayer for Sleep{ep}"
     if len(title) > 100:                 # 转折句太长时先砍它,而不是砍关键词
         room = 100 - len(f" — {primary['ref']} | {dur} Christian Night Prayer for Sleep{ep}")
-        head = head[:max(12, room - 1)].rstrip(" ,;—-")
+        head = head[:max(12, room - 1)]
+        # 只在词边界截:标题里出现「not your —」「You have o —」这种半个词,
+        # 比超长更伤 —— 搜索端与观众读到的第一行就是它。
+        if " " in head[12:]:
+            head = head[:head.rfind(" ")]
+        head = head.rstrip(" ,;—-")
+        # 词边界截完还可能悬着虚词(「…to give, not」),再剥到实词为止
+        while head.rsplit(" ", 1)[-1].lower() in {
+                "not", "and", "the", "to", "a", "an", "of", "is", "but", "or"}:
+            head = head.rsplit(" ", 1)[0].rstrip(" ,;—-")
         title = f"{head} — {primary['ref']} | {dur} Christian Night Prayer for Sleep{ep}"
     others = [k for k, _ in found.most_common() if k != primary["ref"]][:5]
     body = "\n".join([

@@ -20,7 +20,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from atom_quality import reject_reason
+from atom_quality import (FLOW_GAP, MAX_OVERLAP, SYNTAX_REPAIR_GAP,
+                          WAVEFORM_REPAIR_GAP, completes_dangling,
+                          head_fragment_reason, load_whitelist, reject_reason,
+                          words as aq_words)
+from sg_media import probe_duration as sg_probe
 
 DEFAULT_ATOMS = Path.home() / "Studio/Library/sg/atoms"
 DEFAULT_GRAMMAR = Path.home() / "Studio/Library/sg/catalog/grammars/evening_prayer_v0.json"
@@ -44,8 +48,10 @@ class AtomRec:
     t_end: float = 0.0
     text: str = ""
     addressee: str = "neutral"     # god / listener / neutral —— 「你」指谁
-    head_cut: bool = False         # 波形:起点切穿语流,首词被削
-    tail_cut: bool = False         # 波形:终点切穿语流,尾词被削
+    head_cut: bool = False         # 母带:起点处仍在发声(采集丢词)
+    tail_cut: bool = False         # 母带:终点处仍在发声(采集丢词)
+    head_hard_cut: bool = False    # 实测:原子自己的起点停在满音量,首词被削
+    tail_hard_cut: bool = False    # 实测:原子自己的终点停在满音量,尾词被削
     sequence_index: int = -1
 
 
@@ -54,14 +60,13 @@ def _run(cmd: list[str]) -> subprocess.CompletedProcess:
 
 
 def probe_duration(path: Path) -> float:
-    r = _run([
-        "ffprobe", "-v", "error", "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1", str(path),
-    ])
-    try:
-        return float(r.stdout.strip())
-    except ValueError:
-        return 0.0
+    """时长(秒);读不出返回 0.0。
+
+    ⚠ 兜底值 0.0 是为了兼容既有调用点,**新代码请直接用 sg_media**:
+    `probe_duration` 返回 None、`probe_duration_or_die` 直接停。
+    返回 0.0 的坑见 sg_media 模块开头 —— 222 条时长漂移就是这么来的。
+    """
+    return sg_probe(path) or 0.0
 
 
 def load_atoms(manifest_path: Path) -> list[AtomRec]:
@@ -71,12 +76,17 @@ def load_atoms(manifest_path: Path) -> list[AtomRec]:
       · 11 条已隔离的「自比上帝」原子照样能被选进节目(神学红线)
       · ~400 条静音原子带着相邻句的假文本,渲染出有字幕却无声的段落
     隔离字段与质量门都存在,只是编排器从来没读过 —— 加字段不等于设门禁。
+
+    2026-08-10 加第三道门:whisper 复核白名单 08-05 就生成好了,但同样
+    没有任何代码消费它 —— qc01~qc08 八期照样混入 42–46% 病态原子
+    (成片里语音与字幕对不上的直接原因)。白名单缺失时直接抛异常停线。
     """
+    whitelist = load_whitelist()
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
     out: list[AtomRec] = []
     rejected: dict[str, int] = {}
     for a in data.get("atoms", []):
-        why = reject_reason(a)
+        why = reject_reason(a, whitelist)
         if why:
             k = re.sub(r"[\d.]+", "N", why)
             rejected[k] = rejected.get(k, 0) + 1
@@ -98,6 +108,8 @@ def load_atoms(manifest_path: Path) -> list[AtomRec]:
             addressee=str(a.get("addressee") or "neutral"),
             head_cut=bool(a.get("head_cut")),
             tail_cut=bool(a.get("tail_cut")),
+            head_hard_cut=bool(a.get("head_hard_cut")),
+            tail_hard_cut=bool(a.get("tail_hard_cut")),
         ))
     if rejected:
         detail = " · ".join(f"{k} {v}" for k, v in sorted(rejected.items()))
@@ -243,13 +255,20 @@ def load_recent(days: int) -> dict[str, float]:
     eps = hist.get("episodes", [])[-days:]
     out: dict[str, float] = {}
     for i, ep in enumerate(eps):
-        w = (i + 1) / len(eps)          # 越靠后(越近)权重越大
+        # 越近权重越大,但**最老的一期也要留住半程罚分**。
+        # 原式 (i+1)/len 让窗口最老那期只剩 1/12 权重 → 罚分 −3.3,
+        # 排不过续接 +12 与角色 +5,于是相隔 8 期的两期能撞掉 67.7% 的台词
+        # (2026-08-12 实测第 3 期 ∩ 第 11 期 = 63/93 句)。
+        # 下限抬到 0.5(罚分 −20)后,整个窗口内都真正设防;仍用惩罚而非硬排除,
+        # CLOSE 这类只有 7 条唯一文案的槽位才能在供给紧张时自然退让。
+        w = 0.5 + 0.5 * (i + 1) / len(eps)
         for aid in ep.get("atom_ids", []):
             out[aid] = max(out.get(aid, 0.0), w)
     return out
 
 
-def record_episode(episode_id: str, atom_ids: list[str], keep: int = 60) -> None:
+def record_episode(episode_id: str, atom_ids: list[str], keep: int = 60,
+                   tracks: list[str] | None = None) -> None:
     hist = {"episodes": []}
     if HISTORY.exists():
         try:
@@ -259,10 +278,49 @@ def record_episode(episode_id: str, atom_ids: list[str], keep: int = 60) -> None
     hist.setdefault("episodes", []).append(
         {"episode_id": episode_id,
          "at": datetime.now(timezone.utc).isoformat(),
-         "atom_ids": atom_ids})
+         "atom_ids": atom_ids,
+         "tracks": tracks or []})
     hist["episodes"] = hist["episodes"][-keep:]
     HISTORY.parent.mkdir(parents=True, exist_ok=True)
     HISTORY.write_text(json.dumps(hist, ensure_ascii=False, indent=1))
+
+
+def record_tracks(episode_id: str, tracks: list[str]) -> None:
+    """把选床结果回填进本期的历史条目。
+
+    历史在**门禁通过时**落笔(原子与裁决同一时刻,不能等),而曲目要到
+    渲染阶段选完床才知道 —— 所以分两步:先记原子,后补曲目。"""
+    if not HISTORY.exists():
+        return
+    try:
+        hist = json.loads(HISTORY.read_text())
+    except Exception:
+        return
+    for ep in reversed(hist.get("episodes", [])):
+        if ep.get("episode_id") == episode_id:
+            ep["tracks"] = tracks
+            break
+    HISTORY.write_text(json.dumps(hist, ensure_ascii=False, indent=1))
+
+
+def load_recent_tracks(episodes: int = 8) -> set[str]:
+    """最近 N 期用过的曲目文件名 —— 选床时整曲回避。
+
+    VO 原子有 cooldown,音乐此前却是纯随机:1,501 首曲库随机抽 10 首,
+    两期重合的期望只有 0.07 首,听感上确实"几乎不重"——但那是概率,
+    不是保证。改成硬回避后:60 分钟一期约 18 首,曲库仍够 80+ 期完全
+    不重曲;回避窗口 8 期只挡住近邻,远期轮回是曲库规模决定的自由。
+    """
+    if not HISTORY.exists():
+        return set()
+    try:
+        hist = json.loads(HISTORY.read_text())
+    except Exception:
+        return set()
+    out: set[str] = set()
+    for ep in hist.get("episodes", [])[-episodes:]:
+        out.update(ep.get("tracks") or [])
+    return out
 
 
 MID_SENTENCE_RE = re.compile(r"[.!?]\s*[\"”]?\s*$")
@@ -300,7 +358,20 @@ def successor_of(atoms: list["AtomRec"], atom: "AtomRec") -> "AtomRec | None":
             # 后继若离得太远,母带里中间隔着别的话,接上去并不能把句子说完。
             # 判据必须和 directly_continues / 内容审计完全一致,否则
             # 补完的结果会被审计判成孤立碎片。
-            return c if directly_continues(atom, c, 18.0) else None
+            #
+            # **尾词被波形切穿的,容差收到 0.35s**:那半个词就躺在紧挨着的
+            # 下一条里,隔几秒的「后继」中间已经丢了话,补完是假的。
+            # 三档容差,按「要补的是什么」分:
+            #   被削掉半个词  → 0.35s(那半个词就在紧挨着的下一条里)
+            #   句子没说完    → 8.0s(实测真实续句的上界)
+            #   只是语流衔接  → 18.0s(刻意的长停顿,两句各自完整)
+            if atom.tail_cut and atom.tail_hard_cut:
+                limit = WAVEFORM_REPAIR_GAP
+            elif ends_mid_sentence(atom.text):
+                limit = SYNTAX_REPAIR_GAP
+            else:
+                limit = FLOW_GAP
+            return c if directly_continues(atom, c, limit) else None
     return None
 
 
@@ -353,11 +424,8 @@ def is_orphan_fragment(text: str) -> bool:
     return False
 
 
-# 相邻原子允许的最大重叠。实测全库 1388 对相邻原子中 18.5% 有重叠,
-# 幅度只有 0.090s 和 0.210s 两档 —— 是采集切分的固定伪影,不是语义问题。
-# 原先写 -0.15,恰好卡在两档之间,于是 0.210s 那批被判成「不相邻」,
-# 补完出来的句子被审计当成孤立碎片。取 -0.25 覆盖全部实测值并留余量。
-MAX_OVERLAP = -0.25
+# 间隔判据(MAX_OVERLAP / WAVEFORM_REPAIR_GAP / SYNTAX_REPAIR_GAP)的取值依据
+# 与出处见 atom_quality —— 出片端与验收端共用,不得在本文件另行定义。
 
 
 def directly_continues(previous: AtomRec | None, atom: AtomRec, max_gap_sec: float) -> bool:
@@ -367,6 +435,29 @@ def directly_continues(previous: AtomRec | None, atom: AtomRec, max_gap_sec: flo
         return False
     gap = atom.t_start - previous.t_end
     return MAX_OVERLAP <= gap <= max_gap_sec
+
+
+def waveform_contiguous(previous: AtomRec | None, atom: AtomRec) -> bool:
+    """两条原子在母带里是否**紧挨着** —— 被切穿的边界只有它修得了。"""
+    return directly_continues(previous, atom, WAVEFORM_REPAIR_GAP)
+
+
+def stutters_with(previous: AtomRec | None, atom: AtomRec) -> bool:
+    """接上去会不会把同一个词念两遍。
+
+    相邻原子有 0.09s / 0.21s 两档固定重叠(采集切分的伪影)。重叠区里若正好
+    落着一个词,它就同时存在于两个文件中 —— 拼起来听到的是
+    「Now, Lord, as ／ **As** I lie down」。
+    判据必须带上「间隔为负」:间隔 6 秒的「…surrounds you.」接「**You** are
+    invited…」只是两句都碰到了 you,而「You can rest… ／ You can sleep…」
+    是刻意的排比,两者都不该拦。
+    """
+    if previous is None or previous.source_master != atom.source_master:
+        return False
+    if atom.t_start - previous.t_end >= 0:
+        return False
+    pw, aw = aq_words(previous.text or ""), aq_words(atom.text or "")
+    return bool(pw and aw and pw[-1] == aw[0])
 
 
 def text_is_duplicate(text: str, used_texts: set[str], threshold: float = 0.84) -> bool:
@@ -502,6 +593,7 @@ def select_for_slot(
     previous_atom: AtomRec | None = None,
     cta_count: int = 0,
     terminal_phase: bool = False,
+    role_streak: tuple[str, int] = ("", 0),
 ) -> list[AtomRec | float]:
     """Return list of AtomRec or float silence seconds."""
     roles = slot.get("roles") or ["misc"]
@@ -546,6 +638,11 @@ def select_for_slot(
             return False
         if atom.role == "close" and not terminal_phase:
             return False
+        # 只挡 close **角色**不够:「In the name of Jesus Christ.」存在 release
+        # 角色的孪生原子,曾被 FILL 在中段消费 —— 结尾语提前出现,且 CLOSE
+        # 随后因文本查重无米下锅。强结尾**形态**一律留给终末槽位。
+        if not terminal_phase and is_strong_close_text(text):
+            return False
         if atom.role == "open" and terminal_phase:
             return False
         if str(slot.get("id", "")).upper() == "CLOSE" and not is_strong_close_text(text):
@@ -558,10 +655,23 @@ def select_for_slot(
         # 补句链把后继接上后,祝福位读成「Peace be with you. with you now.」
         if slot_id in {"BLESS", "CLOSE"} and needs_closure(atom):
             return False
-        # 波形判定首词被削 → 只能紧跟母带里的前一条,单独播会缺字。
-        # 这比句法判据可靠:"He will never leave." 语法完整、句号结尾,
-        # 但波形显示它切穿了 "He will never leave you" 的语流。
-        if atom.head_cut and not continuation:
+        # 头部残缺 → 只能紧跟母带里的前一条,单独播会缺字/没头没脑。
+        # 波形证据(head_cut)比句法可靠:"He will never leave." 语法完整、
+        # 句号结尾,但波形显示它切穿了 "He will never leave you" 的语流。
+        # 句法证据(连词开头)同样算:「And he answers with love.」单独出现
+        # 是悬空的续句 —— 此前本地的 FRAGMENT_START_RE 只拦一小撮词,
+        # "And he…" 漏网,改用 atom_quality 的公共判据(同一概念一处判据)。
+        #
+        # 两种残缺要求的「前一条」不是一回事:波形切穿要**紧挨着**(0.35s)才
+        # 补得回首词;句法碎片语流完整,普通续接(18s)即可。
+        if (head_fragment_reason({"head_cut": atom.head_cut, "text": text})
+                and not continuation):
+            return False
+        # 语速上界:>3.5 词/秒的原子睡前听不清。上界历史上实测(4.0)无误杀,
+        # 当年误判的是**下界**(慢读是设计)—— 这里只设上界,不碰下界。
+        if atom.duration_sec > 0 and len(aq_words(text)) / atom.duration_sec > 3.5:
+            return False
+        if stutters_with(previous_atom, atom):
             return False
         if not addressee_compatible(previous_atom, atom):
             return False
@@ -589,6 +699,19 @@ def select_for_slot(
                 return False
             if not matches_perspective(ntext, perspective):
                 return False
+            # 补句链会把后继**直接**接进节目,不再过 _eligible —— 所以后继
+            # 自身的硬性判据必须在这里查。VO_PIPELINE 第 5 条记过一次同样的
+            # 事(复数人称经补句链混进单数人称的一期),当时补了人称与指代,
+            # 漏了语速:2026-08-12 实测「At the end of the day,」5.5 词/秒
+            # 靠这条缝隙进了 11 期,每期被 C5 扣分。
+            if nxt.duration_sec > 0 and len(aq_words(ntext)) / nxt.duration_sec > 3.5:
+                return False
+            if stutters_with(cur, nxt):
+                return False
+            # 悬空句只能由**同一句的延续**接上。后继若是大写开头的新句,
+            # 补句链看似「说完了」,听感上那个念头始终悬着。
+            if not completes_dangling(cur.text or "", ntext):
+                return False
             if not addressee_compatible(cur, nxt):
                 return False
             seen_ids.add(nxt.id)
@@ -597,6 +720,8 @@ def select_for_slot(
 
     picked: list[AtomRec] = []
     remaining = list(candidates)
+    streak_role, streak_len = role_streak
+    slot_id_up = str(slot.get("id", "")).upper()
     while len(picked) < n and remaining:
         eligible = [a for a in remaining if _eligible(a)]
         if not eligible:
@@ -613,18 +738,36 @@ def select_for_slot(
             pool = role_matched
         else:
             pool = eligible
+
+        def _extras(candidate: AtomRec) -> float:
+            extra = 0.0
+            if slot_id_up == "CLOSE":
+                extra += strong_close_score(candidate.text)
+            # BLESS 靠 bless 标签回退时会抢强结尾原子(CLOSE 的唯一供给
+            # 只有 14 条文案)。祝福位上避开强结尾形态,把它们留给 CLOSE。
+            if slot_id_up == "BLESS" and is_strong_close_text(candidate.text or ""):
+                extra -= 6.0
+            # 同角色连跑 >4 条行文单调(scripture 连读 7 条像在念经文清单)。
+            # 只是偏好,不是正确性 —— 续接 +12 仍能压过它。
+            if candidate.role == streak_role:
+                if streak_len >= 4:
+                    extra -= 8.0
+                elif streak_len == 3:
+                    extra -= 3.0
+            return extra
+
         a = max(
             pool,
             key=lambda candidate: score_atom(
                 candidate, roles, boost_tags, prefer, prefer_min,
                 previous_atom=previous_atom,
                 continuation_max_gap_sec=continuity_gap,
-            ) + (
-                strong_close_score(candidate.text)
-                if str(slot.get("id", "")).upper() == "CLOSE"
-                else 0.0
-            ),
+            ) + _extras(candidate),
         )
+        if a.role == streak_role:
+            streak_len += 1
+        else:
+            streak_role, streak_len = a.role, 1
         picked.append(a)
         used_ids.add(a.id)
         remaining = [candidate for candidate in remaining if candidate.id != a.id]
@@ -654,6 +797,10 @@ def select_for_slot(
             nt = normalize_atom_text(nxt.text or "")
             if nt:
                 used_texts.add(nt)
+            if nxt.role == streak_role:
+                streak_len += 1
+            else:
+                streak_role, streak_len = nxt.role, 1
             previous_atom = nxt
     return picked
 
@@ -713,10 +860,18 @@ def build_music_bed(
     *,
     crossfade: float = 8.0,
     layout_out: list | None = None,
+    avoid: set[str] | None = None,
 ) -> Path:
     if not tracks:
         raise RuntimeError("No music tracks available for bed")
     random.shuffle(tracks)
+    if avoid:
+        # 近期用过的曲目排到队尾而不是丢掉:曲库万一不够长,宁可重曲也不能没床
+        fresh = [t for t in tracks if t.name not in avoid]
+        stale = [t for t in tracks if t.name in avoid]
+        if stale:
+            print(f"  [music] 回避近期用过的 {len(stale)} 首(曲库剩 {len(fresh)} 首可选)")
+        tracks = fresh + stale
     selected: list[Path] = []
     durations: list[float] = []
     total = 0.0
@@ -938,6 +1093,29 @@ def _srt_time(sec: float) -> str:
     return f"{int(h):02d}:{int(m):02d}:{int(s):02d},{int(round((s % 1) * 1000)):03d}"
 
 
+def subtitle_typography(text: str, *, continues_prev: bool) -> str:
+    """字幕排版修正 —— VO_PIPELINE 明确许可的两项:标点与大小写。
+
+    **只动字幕文本,不动音频、不加词、不改词。** 采集按语音停顿切分,一句话
+    常被切成两条原子,于是成片字幕出现「set apart for restoration.」
+    「tonight i will rest」这种小写开头、无句末标点的条目 —— 语义没错,
+    读起来却像残句。
+
+    两条规则,都要求**有把握**才动:
+      · 句首字母大写:仅当这条不是紧接前一条的续句时(续句本就该小写)
+      · 补句末标点:仅当这条不被后继补完时,且末尾不是逗号等待续接
+    拿不准就原样保留 —— 字幕宁可朴素,不可自作主张。
+    """
+    t = text.strip()
+    if not t:
+        return t
+    # 英文第一人称代词恒为大写,这条没有判断余地(whisper 常转写成小写 i)
+    t = re.sub(r"\bi\b", "I", t)
+    if not continues_prev and t[:1].islower():
+        t = t[0].upper() + t[1:]
+    return t
+
+
 def build_srt(atoms: list[dict], min_on: float = 1.2, lead: float = 0.10) -> str:
     """一条原子 = 一条字幕。
 
@@ -950,7 +1128,12 @@ def build_srt(atoms: list[dict], min_on: float = 1.2, lead: float = 0.10) -> str
     out: list[str] = []
     n = 0
     for i, p in enumerate(atoms):
-        text = (p.get("text") or "").strip()
+        prev = atoms[i - 1] if i else None
+        cont = bool(prev
+                    and prev.get("source_master") == p.get("source_master")
+                    and int(p.get("source_sequence_index", -1))
+                    == int(prev.get("source_sequence_index", -2)) + 1)
+        text = subtitle_typography(p.get("text") or "", continues_prev=cont)
         s = p.get("vo_start_sec")
         e = p.get("vo_end_sec")
         if not text or s is None or e is None:
@@ -1258,6 +1441,8 @@ def main() -> int:
     ap.add_argument("--video-speed", type=float, default=0.125, help="Video playback speed (default 0.125 = 8× slower)")
     ap.add_argument("--video-dir", type=Path, default=DEFAULT_VIDEO_DIR)
     ap.add_argument("--plan-only", action="store_true", help="Assemble and audit content without rendering audio")
+    ap.add_argument("--no-score-gate", action="store_true",
+                    help="VO 检测门降级为只报不拦(调试/复现旧片用)")
     ap.add_argument("--no-history", action="store_true",
                     help="不记入出片历史(试排/回归测试用,免得污染 cooldown)")
     ap.add_argument("--plan-output", type=Path, default=None, help="Write full atom plan JSON and a readable Markdown script")
@@ -1303,6 +1488,8 @@ def main() -> int:
     used_texts: set[str] = set()
     previous_atom: AtomRec | None = None
     cta_count = 0
+    # 跨槽位的同角色连跑计数 —— 选曲端据此避免 scripture 连读 5+ 条的单调感
+    role_streak_state: list = ["", 0]
 
     def _atom_text(atom_path: Path) -> str | None:
         side = atom_path.with_suffix(".json")
@@ -1351,10 +1538,14 @@ def main() -> int:
         speech_dur = float(atom.duration_sec) * tempo_scale
         # progress 用 cursor / 目标总长：停顿要跟"听者听到哪儿了"走，
         # 不是跟第几个原子走（原子长短差十倍，计数不代表时间）。
+        # 分母必须是**本期真实目标** vo_goal，不能用 args.minutes(固定 18)：
+        # vo_goal 从语法抽 [10,22] 分钟，抽到 10 分钟时若按 18 算，
+        # 节目结束在 progress≈0.55，深度停顿段(6→10s)整段没走到 ——
+        # 后半程密度降不下来就是这么来的。
         pad = speech_pad(
             speech_dur, pad_cfg, pad_ge_speech=pad_ge, pad_speech_ratio=pad_ratio,
             words=len(str(atom.text or "").split()) or None,
-            progress=cursor / max(1.0, a.minutes * 60.0),
+            progress=cursor / max(60.0, vo_goal),
         )
         text = atom.text or _atom_text(atom.path)
         timeline.append(("atom", atom.path, pad))
@@ -1385,6 +1576,10 @@ def main() -> int:
             used_texts.add(norm)
         if is_cta_text(text or ""):
             cta_count += 1
+        if atom.role == role_streak_state[0]:
+            role_streak_state[1] += 1
+        else:
+            role_streak_state[0], role_streak_state[1] = atom.role, 1
         previous_atom = atom
 
     def process_slots(slot_group: list[dict], *, terminal_phase: bool = False) -> None:
@@ -1400,6 +1595,7 @@ def main() -> int:
                 previous_atom=previous_atom,
                 cta_count=cta_count,
                 terminal_phase=terminal_phase,
+                role_streak=(role_streak_state[0], role_streak_state[1]),
             )
             pad_cfg = float(slot.get("pad_after_sec") or co.get("pad_after_sec") or 1.5)
             for pick in picks:
@@ -1412,17 +1608,21 @@ def main() -> int:
                     append_atom(pick, str(slot["id"]), pad_cfg)
                     pad_cfg = max(1.0, pad_cfg * 0.85)
 
-    terminal_ids = {"BLESS", "CLOSE"}
-    body_slots = [s for s in slots if str(s.get("id", "")).upper() not in terminal_ids]
-    terminal_slots = [s for s in slots if str(s.get("id", "")).upper() in terminal_ids]
-    process_slots(body_slots)
-
-    # Density fill: keep adding longer scripture/poetic/safety until VO target
+    # 本期 VO 目标必须在**出第一条原子之前**定下来:append_atom 的停顿曲线
+    # 以它为进度分母。原先在 body 处理完才抽,曲线只能拿 args.minutes 凑数。
     vo_target_min = grammar.get("target_vo_minutes") or [10, 18]
     if isinstance(vo_target_min, list):
         vo_goal = random.uniform(float(vo_target_min[0]), float(vo_target_min[1])) * 60.0
     else:
         vo_goal = float(vo_target_min) * 60.0
+
+    # REST_BEFORE_BLESS 必须归终末组:它是「祝福前的静默」,留在 body 里会被
+    # 密度填充(FILL)插到它和 BLESS 之间 —— 静默名存实亡(10/10 期实测如此)。
+    terminal_ids = {"REST_BEFORE_BLESS", "BLESS", "CLOSE"}
+    body_slots = [s for s in slots if str(s.get("id", "")).upper() not in terminal_ids]
+    terminal_slots = [s for s in slots if str(s.get("id", "")).upper() in terminal_ids]
+    process_slots(body_slots)
+
     # Rough estimate current VO length from plan (speech + pads + rests)
     est = sum(
         (
@@ -1436,11 +1636,24 @@ def main() -> int:
     fi = 0
     fill_pad_cfg = 1.5
     max_fill_attempts = len(atoms)
+    # —— 填充段的语音密度必须**低于**正片段 ——
+    # T3 要求后半程比前半程更空(助眠曲线),而填充全落在后半。此前靠「每 N 条
+    # 插一段定长休息」去凑,常数调了三轮:每 5 条 → 后半密度 1.14 被拦;
+    # 每 3 条加随进度缩放 → 又掉到 0.23,被 T2 判太空。
+    # 症结是拿「插入频率」这个间接量去控「密度」这个直接量。改成直接算:
+    # 量出正片段的实际密度,再按目标比例反推每条填充后面该留多长。
+    body_speech = sum(float(p.get("duration_sec") or 0)
+                      for p in plan if p.get("type") == "atom")
+    body_density = body_speech / max(1.0, cursor)
+    fill_density_target = max(0.16, body_density * 0.72)
+    max_fill_attempts = len(atoms)
     while est < vo_goal and fi < max_fill_attempts:
         fi += 1
         picks = select_for_slot(
             atoms,
-            {"id": "FILL", "roles": fill_roles, "pick": 1, "prefer_min_sec": 3.0},
+            # 不再偏好长原子:prefer_min_sec 3.0 让填充系统性地挑更长的句子,
+            # 语音变多而停顿不变,正是后半密度顶上去的直接原因。
+            {"id": "FILL", "roles": fill_roles, "pick": 1, "prefer_min_sec": 2.0},
             used_ids=used,
             boost_tags=boost,
             grammar=grammar,
@@ -1448,6 +1661,7 @@ def main() -> int:
             previous_atom=previous_atom,
             cta_count=cta_count,
             terminal_phase=False,
+            role_streak=(role_streak_state[0], role_streak_state[1]),
         )
         if not picks or isinstance(picks[0], float):
             break
@@ -1460,8 +1674,14 @@ def main() -> int:
             append_atom(pick, "FILL", fill_pad_cfg)
             previous_atom = pick
         est += cursor - before
-        if fi % 5 == 0:
-            sil = random.uniform(6.0, 14.0)
+        # 这一轮加进来的语音,按目标密度反推该占多长的时间;不足的部分补静默。
+        added_speech = sum(float(p.get("duration_sec") or 0) for p in plan
+                           if p.get("type") == "atom"
+                           and float(p.get("start_sec") or 0) >= before)
+        want_span = added_speech / fill_density_target
+        sil = want_span - (cursor - before)
+        if sil >= 3.0:
+            sil = min(sil, 45.0) * random.uniform(0.9, 1.1)
             timeline.append(("silence", sil, 0.0))
             plan.append({"slot": "FILL_REST", "type": "silence", "sec": sil, "start_sec": cursor})
             cursor += sil
@@ -1470,14 +1690,40 @@ def main() -> int:
 
     # Blessing and close are always last; density fill can no longer continue
     # after an Amen or closing benediction.
-    process_slots(terminal_slots, terminal_phase=True)
+    # 终末供给保卫:强结尾唯一文案仅 ~14 条,BLESS 靠 bless 标签回退时会吃掉
+    # 同一批 close 原子,轮到 CLOSE 时无米下锅(实测 seed 9/10 成片没有结尾)。
+    # 先试选 CLOSE 并预留其原子,选完 BLESS 再归还预留、正式选 CLOSE。
+    close_slot = next((s for s in terminal_slots
+                       if str(s.get("id", "")).upper() == "CLOSE"), None)
+    reserved: set[str] = set()
+    if close_slot is not None:
+        trial = select_for_slot(
+            atoms, close_slot,
+            used_ids=set(used), boost_tags=boost, grammar=grammar,
+            used_texts=set(used_texts), previous_atom=previous_atom,
+            cta_count=cta_count, terminal_phase=True,
+        )
+        reserved = {a.id for a in trial if not isinstance(a, float)}
+        used.update(reserved)
+    process_slots([s for s in terminal_slots if s is not close_slot],
+                  terminal_phase=True)
+    used.difference_update(reserved)
+    if close_slot is not None:
+        # 祝福(you=听者)与收尾祷告(you=上帝)几乎必然切换指代,而 addressee
+        # 门禁只认中性句或静默作为切换点 —— 于是 CLOSE 十有八九选不出原子,
+        # 成片没有结尾(实测 8/10)。与 REST_BEFORE_BLESS 同一手法:改结构,
+        # 插静默,不加隐藏规则。礼仪上祝祷与奉名结束之间本就该有停顿。
+        if plan and plan[-1].get("type") == "atom" \
+                and str(plan[-1].get("slot", "")).upper() == "BLESS":
+            sil = random.uniform(4.0, 7.0)
+            timeline.append(("silence", sil, 0.0))
+            plan.append({"slot": "REST_BEFORE_CLOSE", "type": "silence",
+                         "sec": sil, "start_sec": cursor})
+            cursor += sil
+            previous_atom = None
+        process_slots([close_slot], terminal_phase=True)
 
     content_audit = audit_plan_content(plan, grammar)
-    if content_audit["ok"] and not args.no_history:
-        # 记入历史,下一期据此回避。只记通过门禁的 —— 失败的方案不算出过片。
-        record_episode(args.episode_id or "session",
-                       [p["id"] for p in plan
-                        if p.get("type") == "atom" and p.get("id")])
     if not content_audit["ok"]:
         # 门禁失败时必须留下现场。只抛一行错误信息等于让人猜是哪几条原子
         # 触发的 —— 迭代时每次都要重跑一遍才能看到内容。
@@ -1496,6 +1742,33 @@ def main() -> int:
                     print(f"    · {str(item)[:96]}")
         raise SystemExit("content quality gate failed: "
                          + "; ".join(content_audit["errors"]))
+
+    # —— VO 检测门(2026-08-10):时序/停顿 40 + 表述清晰度 30 + 行文结构 30,
+    # ≥95 放行。判据细节见 vo_score.py;A 层判据与 qc_session 同源。
+    from vo_score import PASS_SCORE, score_plan
+    vo_verdict = score_plan({
+        "episode_id": args.episode_id, "theme": args.theme, "seed": args.seed,
+        "perspective": args.perspective, "audit": content_audit, "plan": plan,
+    })
+    print(f"[vo-score] {'✅' if vo_verdict['pass'] else '❌'} 总分 {vo_verdict['score']}"
+          f"  (时序 {vo_verdict['timing']}/40 · 清晰 {vo_verdict['clarity']}/30"
+          f" · 结构 {vo_verdict['structure']}/30)")
+    for n in vo_verdict["notes"][:8]:
+        print(f"    · {n}")
+    if not vo_verdict["pass"] and not args.no_score_gate:
+        tag = args.episode_id or "session"
+        dump = args.out / tag / f"{tag}_FAILED_score.json"
+        dump.parent.mkdir(parents=True, exist_ok=True)
+        dump.write_text(json.dumps({"vo_score": vo_verdict, "plan": plan},
+                                   ensure_ascii=False, indent=1))
+        raise SystemExit(f"vo score gate failed: {vo_verdict['score']}"
+                         f" < {PASS_SCORE:g} (现场: {dump})")
+
+    if not args.no_history:
+        # 记入历史,下一期据此回避。只记**两道门都过**的 —— 失败的方案不算出过片。
+        record_episode(args.episode_id or "session",
+                       [p["id"] for p in plan
+                        if p.get("type") == "atom" and p.get("id")])
     if args.plan_only:
         atom_items = [p for p in plan if p.get("type") == "atom"]
         if args.plan_output:
@@ -1506,6 +1779,7 @@ def main() -> int:
                 "seed": args.seed,
                 "perspective": args.perspective,
                 "audit": content_audit,
+                "vo_score": vo_verdict,
                 "plan": plan,
             }
             args.plan_output.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1559,7 +1833,10 @@ def main() -> int:
     bed_tracks: list[dict] = []
     build_music_bed(music_files, target_total, music_path,
                     crossfade=float(mb.get("crossfade_sec", 8)),
-                    layout_out=bed_tracks)
+                    layout_out=bed_tracks,
+                    avoid=load_recent_tracks())
+    if not args.no_history:
+        record_tracks(eid, sorted({t["name"] for t in bed_tracks}))
 
     # If VO shorter, pad VO with trailing silence to match bed for mix alignment end
     if vo_dur < target_total - 1:
@@ -1596,6 +1873,9 @@ def main() -> int:
         "theme": args.theme,
         "voice": "Locke",
         "grammar": grammar.get("id"),
+        # 路径也要存:release_gate R2 与 repair_session 会**现场重算**内容门禁,
+        # 只有 id 的话它们只能猜是默认语法 —— 换语法建的期次会被按错的规则复审。
+        "grammar_path": str(args.grammar),
         "created_at": datetime.now(timezone.utc).isoformat(),
         "seed": args.seed,
         "vo_atempo": atempo,
@@ -1623,6 +1903,7 @@ def main() -> int:
         },
         "atom_count_used": len([p for p in plan if p["type"] == "atom"]),
         "content_audit": content_audit,
+        "vo_score": vo_verdict,
     }
     meta_path = out_dir / f"{eid}_session.json"
     meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")

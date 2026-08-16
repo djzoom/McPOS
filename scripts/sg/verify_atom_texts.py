@@ -29,6 +29,7 @@ from pathlib import Path
 
 import harvest_whisper as hw
 from atom_quality import usable, words
+from sg_media import backup_with_retention
 
 MANIFEST = Path.home() / "Studio/Library/sg/atoms/manifest.json"
 CONF = Path(__file__).resolve().parents[2] / "config"
@@ -47,6 +48,9 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--mark", action="store_true",
                     help="把结论写回 manifest(text_mismatch / no_speech)")
+    ap.add_argument("--write-whitelist", action="store_true",
+                    help="按本次复核结果重建 config/sg_atom_whitelist.json"
+                         "(完全一致 + 仅转写差异 = 放行)")
     ap.add_argument("--limit", type=int, default=0)
     a = ap.parse_args()
 
@@ -124,7 +128,7 @@ def main() -> int:
         return 0
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M")
-    MANIFEST.with_suffix(f".json.bak_verify_{stamp}").write_text(MANIFEST.read_text())
+    backup_with_retention(MANIFEST, "verify")
     mm = {x["id"]: h for x, h in mismatch}
     sl = {x["id"] for x, _ in silent}
     now = datetime.now(timezone.utc).isoformat()
@@ -139,6 +143,23 @@ def main() -> int:
     MANIFEST.write_text(json.dumps(man, ensure_ascii=False, indent=1))
     print(f"🔒 已隔离 {len(mm)} 条文本不符 + {len(sl)} 条无语音"
           f"(备份 manifest.json.bak_verify_{stamp})")
+
+    if a.write_whitelist:
+        # 白名单 = 本次**逐条听过**且文本对得上的原子(完全一致 + 仅转写差异)。
+        # 它必须与本次复核同批产生:2026-08-05 那份白名单只覆盖 1818 条中的
+        # 827 条,却被当成全库判据用了一周,把可用池压到 728 —— 期间重叠率
+        # 因此长期超标,根因不是素材少,是这份名单陈旧且偏保守。
+        wl_path = CONF / "sg_atom_whitelist.json"
+        if wl_path.exists():
+            wl_path.with_suffix(f".json.bak_{stamp}").write_text(
+                wl_path.read_text(encoding="utf-8"), encoding="utf-8")
+        ids = [x["id"] for x in exact] + [x["id"] for x, _ in near]
+        wl_path.write_text(json.dumps({
+            "generated": now,
+            "criterion": f"verify_atom_texts 逐条转写复核:完全一致 或 相似度≥{NEAR}",
+            "checked": n, "whitelisted": len(ids), "ids": ids,
+        }, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"📋 白名单已重建:{len(ids)}/{n} 条放行 → {wl_path.name}")
     return 0
 
 
