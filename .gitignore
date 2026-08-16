@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .mypy_cache/
+*.egg-info/
 
 # Environments
 .venv/
@@ -124,3 +125,16 @@ channels/*/library/
 # McPOS runtime
 mcpos/logs/
 channels/*/credentials/
+
+# —— 密钥：origin 是 public 仓，这几行是唯一的防线 ——
+# 2026-08-12 补。此前这些文件全靠「记得别 git add -A」挡着，
+# 而工作区常年 70+ 未提交项，一次手滑就会把 OAuth token 与 API key 推上公网。
+# （历史干净：只有 config/google/README.md 曾被提交，密钥本身从未入库。）
+config/config.yaml
+config/google/*
+!config/google/README.md
+
+# 工具自动生成的备份/中间态（有保留上限，不入库）
+config/*.bak_*
+config/*.json.bak*
+*.json.bak_*

@@ -1,0 +1,132 @@
+{
+  "window": "2026-08-16",
+  "spent": 8151,
+  "calls": [
+    {
+      "at": "2026-08-16T08:06:18.705038+00:00",
+      "method": "videos.insert",
+      "units": 1600,
+      "note": "sg_gold_008"
+    },
+    {
+      "at": "2026-08-16T08:06:20.352672+00:00",
+      "method": "captions.insert",
+      "units": 400,
+      "note": "sg_gold_008"
+    },
+    {
+      "at": "2026-08-16T08:06:27.723867+00:00",
+      "method": "thumbnails.set",
+      "units": 50,
+      "note": "sg_gold_008"
+    },
+    {
+      "at": "2026-08-16T08:07:28.096068+00:00",
+      "method": "videos.list",
+      "units": 1,
+      "note": "sg_gold_008"
+    },
+    {
+      "at": "2026-08-16T08:07:28.501168+00:00",
+      "method": "captions.list",
+      "units": 50,
+      "note": "sg_gold_008"
+    },
+    {
+      "at": "2026-08-16T08:07:47.083655+00:00",
+      "method": "thumbnails.set",
+      "units": 50,
+      "note": "Ep8 cover"
+    },
+    {
+      "at": "2026-08-16T15:22:35.597113+00:00",
+      "method": "captions.insert",
+      "units": 400,
+      "note": "sg_gold_001 zh-Hans"
+    },
+    {
+      "at": "2026-08-16T15:22:37.007349+00:00",
+      "method": "captions.insert",
+      "units": 400,
+      "note": "sg_gold_001 zh-Hant"
+    },
+    {
+      "at": "2026-08-16T15:22:38.440269+00:00",
+      "method": "captions.insert",
+      "units": 400,
+      "note": "sg_gold_002 zh-Hans"
+    },
+    {
+      "at": "2026-08-16T15:22:40.047359+00:00",
+      "method": "captions.insert",
+      "units": 400,
+      "note": "sg_gold_002 zh-Hant"
+    },
+    {
+      "at": "2026-08-16T15:22:41.518260+00:00",
+      "method": "captions.insert",
+      "units": 400,
+      "note": "sg_gold_003 zh-Hans"
+    },
+    {
+      "at": "2026-08-16T15:22:43.156058+00:00",
+      "method": "captions.insert",
+      "units": 400,
+      "note": "sg_gold_003 zh-Hant"
+    },
+    {
+      "at": "2026-08-16T15:22:44.572621+00:00",
+      "method": "captions.insert",
+      "units": 400,
+      "note": "sg_gold_004 zh-Hans"
+    },
+    {
+      "at": "2026-08-16T15:22:46.105735+00:00",
+      "method": "captions.insert",
+      "units": 400,
+      "note": "sg_gold_004 zh-Hant"
+    },
+    {
+      "at": "2026-08-16T15:22:47.524685+00:00",
+      "method": "captions.insert",
+      "units": 400,
+      "note": "sg_gold_005 zh-Hans"
+    },
+    {
+      "at": "2026-08-16T15:22:49.020003+00:00",
+      "method": "captions.insert",
+      "units": 400,
+      "note": "sg_gold_005 zh-Hant"
+    },
+    {
+      "at": "2026-08-16T15:22:50.465352+00:00",
+      "method": "captions.insert",
+      "units": 400,
+      "note": "sg_gold_006 zh-Hans"
+    },
+    {
+      "at": "2026-08-16T15:22:52.125416+00:00",
+      "method": "captions.insert",
+      "units": 400,
+      "note": "sg_gold_006 zh-Hant"
+    },
+    {
+      "at": "2026-08-16T15:22:53.719316+00:00",
+      "method": "captions.insert",
+      "units": 400,
+      "note": "sg_gold_007 zh-Hans"
+    },
+    {
+      "at": "2026-08-16T15:22:55.215672+00:00",
+      "method": "captions.insert",
+      "units": 400,
+      "note": "sg_gold_007 zh-Hant"
+    },
+    {
+      "at": "2026-08-16T15:22:56.835604+00:00",
+      "method": "captions.insert",
+      "units": 400,
+      "note": "sg_gold_008 zh-Hans"
+    }
+  ]
+}

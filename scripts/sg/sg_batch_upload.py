@@ -25,7 +25,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import quota                                    # noqa: E402
 import upload_meta as meta                      # noqa: E402
-from sg_upload import (build_service, set_thumbnail, upload_caption,   # noqa: E402
+from sg_upload import (CAPTION_TRACKS, build_service, set_thumbnail, upload_caption,   # noqa: E402
                        upload_link_lock, upload_media)
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -34,14 +34,7 @@ THUMBS_DIR = Path.home() / "Studio/Workspace/temp/sg/thumbs"
 DURATION_TOLERANCE = 90.0                        # 秒
 
 
-def probe_duration(path: Path) -> float:
-    r = subprocess.run(["ffprobe", "-v", "quiet", "-show_entries",
-                        "format=duration", "-of", "csv=p=0", str(path)],
-                       capture_output=True, text=True)
-    try:
-        return float(r.stdout.strip())
-    except ValueError:
-        return 0.0
+from sg_media import probe_duration  # noqa: E402,F401
 
 
 def make_thumb(cover: Path, ep_id: str) -> Path | None:
@@ -154,8 +147,16 @@ def cmd(a: argparse.Namespace) -> int:
         print(f"  ⬆️  #{num} {ep_id} 上传中…")
         vid = upload_media(yt, video, body)
         quota.record("videos.insert", ep_id)
-        upload_caption(yt, vid, Path(ep["srt_file"]))
-        quota.record("captions.insert", ep_id)
+        # 英文 + 简繁中文三条轨。中文轨此前从未上传过(语言硬编码 en),
+        # 缺哪条就跳过哪条,不因为字幕不全而中断整期上传。
+        base = Path(ep["srt_file"])
+        for suffix, lang, label in CAPTION_TRACKS:
+            track = base.with_suffix(f"{suffix}.srt") if suffix else base
+            if not track.exists():
+                print(f"      ⏭ 缺 {lang} 字幕,跳过")
+                continue
+            upload_caption(yt, vid, track, language=lang, name=label)
+            quota.record("captions.insert", f"{ep_id} {lang}")
         set_thumbnail(yt, vid, thumb)
         quota.record("thumbnails.set", ep_id)
 

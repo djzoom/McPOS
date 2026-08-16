@@ -1,0 +1,361 @@
+{
+ "generated": "2026-08-13T13:45:33.351722+00:00",
+ "noise_db": -45,
+ "min_gap": 0.25,
+ "lost": [
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 806.64,
+   "end": 809.737,
+   "sec": 3.097
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 926.667,
+   "end": 929.236,
+   "sec": 2.568
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 832.64,
+   "end": 835.096,
+   "sec": 2.456
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 560.53,
+   "end": 562.586,
+   "sec": 2.057
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 774.942,
+   "end": 776.976,
+   "sec": 2.034
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 747.461,
+   "end": 749.402,
+   "sec": 1.94
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0908_Peace_That_Surpasses_Understanding_Sleep_Meditation_with_John_14_27_&_Philippians_4_7.mp3",
+   "start": 410.095,
+   "end": 411.892,
+   "sec": 1.798
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 555.64,
+   "end": 557.407,
+   "sec": 1.767
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0908_Peace_That_Surpasses_Understanding_Sleep_Meditation_with_John_14_27_&_Philippians_4_7.mp3",
+   "start": 412.108,
+   "end": 413.765,
+   "sec": 1.657
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 652.64,
+   "end": 654.28,
+   "sec": 1.64
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 743.847,
+   "end": 745.378,
+   "sec": 1.532
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 717.477,
+   "end": 718.967,
+   "sec": 1.49
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Sleep_in_Grace_Best_Night_Prayer_Psalm121_Lamentations3_2025-09-02.mp3",
+   "start": 431.42,
+   "end": 432.806,
+   "sec": 1.386
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 865.304,
+   "end": 866.676,
+   "sec": 1.372
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 595.929,
+   "end": 597.245,
+   "sec": 1.317
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 899.275,
+   "end": 900.59,
+   "sec": 1.315
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 869.295,
+   "end": 870.59,
+   "sec": 1.295
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 895.697,
+   "end": 896.94,
+   "sec": 1.243
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 629.379,
+   "end": 630.59,
+   "sec": 1.211
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Best_Night_Prayer_for_Deep_Sleep_God_Is_Still_Speaking_in_the_Quiet_Psalm_121_&_Lamentations_3_2025-08-29.mp3",
+   "start": 462.641,
+   "end": 463.84,
+   "sec": 1.199
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 657.196,
+   "end": 658.277,
+   "sec": 1.081
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 922.64,
+   "end": 923.715,
+   "sec": 1.075
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 959.768,
+   "end": 960.67,
+   "sec": 0.902
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 134.3,
+   "end": 135.165,
+   "sec": 0.865
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Rest_Secure_in_God’s_Presence_Best_Night_Prayer_for_Deep_Sleep_Psalm_4_&_Isaiah_41_2025-09-02.mp3",
+   "start": 333.92,
+   "end": 334.764,
+   "sec": 0.844
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_G1_bless_insomnia_part1_2026-08-05.mp3",
+   "start": 362.684,
+   "end": 363.39,
+   "sec": 0.706
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 952.64,
+   "end": 953.336,
+   "sec": 0.696
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Welcome_to_Sleep_in_Grace_Welcome_to_.mp3",
+   "start": 142.506,
+   "end": 143.201,
+   "sec": 0.695
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Welcome_to_Sleep_in_Grace_Welcome_to_.mp3",
+   "start": 145.704,
+   "end": 146.346,
+   "sec": 0.641
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Sleep_in_Grace_Best_Night_Prayer_Psalm121_Lamentations3_2025-09-02.mp3",
+   "start": 454.92,
+   "end": 455.549,
+   "sec": 0.629
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 435.7,
+   "end": 436.328,
+   "sec": 0.628
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0908_Peace_That_Surpasses_Understanding_Sleep_Meditation_with_John_14_27_&_Philippians_4_7.mp3",
+   "start": 108.4,
+   "end": 109.017,
+   "sec": 0.617
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_G1_bless_insomnia_part2_2026-08-05.mp3",
+   "start": 79.7,
+   "end": 80.303,
+   "sec": 0.603
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0906Fall_Asleep_Knowing_God_Will_Never_Leave_You_Bedtime_Prayer_from_Deuteronomy_31.mp3",
+   "start": 626.685,
+   "end": 627.286,
+   "sec": 0.601
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_G1_bless_insomnia_part2_2026-08-05.mp3",
+   "start": 60.08,
+   "end": 60.68,
+   "sec": 0.6
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Best_Night_Prayer_for_Deep_Sleep_God_Is_Still_Speaking_in_the_Quiet_Psalm_121_&_Lamentations_3_2025-08-29.mp3",
+   "start": 306.26,
+   "end": 306.853,
+   "sec": 0.593
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Sleep_in_Grace_Fall_Asleep_in_God’s_Presence_Psalm16_Matthew28_2025-08-31.mp3",
+   "start": 504.3,
+   "end": 504.884,
+   "sec": 0.584
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Best_Night_Prayer_for_Deep_Sleep_God_Is_Still_Speaking_in_the_Quiet_Psalm_121_&_Lamentations_3_2025-08-29.mp3",
+   "start": 284.8,
+   "end": 285.371,
+   "sec": 0.571
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_G2_safety_open_themes_2026-08-05.mp3",
+   "start": 519.04,
+   "end": 519.601,
+   "sec": 0.561
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Welcome_to_Sleep_in_Grace_Welcome_to_.mp3",
+   "start": 171.91,
+   "end": 172.416,
+   "sec": 0.506
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Best_Night_Prayer_for_Deep_Sleep_God_Is_Still_Speaking_in_the_Quiet_Psalm_121_&_Lamentations_3_2025-08-29.mp3",
+   "start": 515.36,
+   "end": 515.855,
+   "sec": 0.495
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Rest_Secure_in_God’s_Presence_Best_Night_Prayer_for_Deep_Sleep_Psalm_4_&_Isaiah_41_2025-09-02.mp3",
+   "start": 294.865,
+   "end": 295.31,
+   "sec": 0.445
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Sleep_in_Grace_Fall_Asleep_in_God’s_Presence_Psalm16_Matthew28_2025-08-31.mp3",
+   "start": 519.91,
+   "end": 520.347,
+   "sec": 0.438
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Rest_Secure_in_God’s_Presence_Best_Night_Prayer_for_Deep_Sleep_Psalm_4_&_Isaiah_41_2025-09-02.mp3",
+   "start": 368.94,
+   "end": 369.35,
+   "sec": 0.41
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0908_Peace_That_Surpasses_Understanding_Sleep_Meditation_with_John_14_27_&_Philippians_4_7.mp3",
+   "start": 150.86,
+   "end": 151.246,
+   "sec": 0.386
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Sleep_in_Grace_Best_Night_Prayer_Psalm121_Lamentations3_2025-09-02.mp3",
+   "start": 480.22,
+   "end": 480.6,
+   "sec": 0.38
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Best_Night_Prayer_for_Deep_Sleep_God_Is_Still_Speaking_in_the_Quiet_Psalm_121_&_Lamentations_3_2025-08-29.mp3",
+   "start": 499.92,
+   "end": 500.267,
+   "sec": 0.347
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Welcome_to_Sleep_in_Grace_Welcome_to_.mp3",
+   "start": 14.469,
+   "end": 14.8,
+   "sec": 0.331
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_0908_Peace_That_Surpasses_Understanding_Sleep_Meditation_with_John_14_27_&_Philippians_4_7.mp3",
+   "start": 194.06,
+   "end": 194.389,
+   "sec": 0.329
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Best_Night_Prayer_for_Deep_Sleep_God_Is_Still_Speaking_in_the_Quiet_Psalm_121_&_Lamentations_3_2025-08-29.mp3",
+   "start": 439.725,
+   "end": 440.05,
+   "sec": 0.325
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Welcome_to_Sleep_in_Grace_Welcome_to_.mp3",
+   "start": 230.408,
+   "end": 230.73,
+   "sec": 0.322
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Sleep_in_Grace_Fall_Asleep_in_God’s_Presence_Psalm16_Matthew28_2025-08-31.mp3",
+   "start": 557.82,
+   "end": 558.134,
+   "sec": 0.314
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Rest_Secure_in_God’s_Presence_Best_Night_Prayer_for_Deep_Sleep_Psalm_4_&_Isaiah_41_2025-09-02.mp3",
+   "start": 356.286,
+   "end": 356.59,
+   "sec": 0.304
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Best_Night_Prayer_for_Deep_Sleep_God_Is_Still_Speaking_in_the_Quiet_Psalm_121_&_Lamentations_3_2025-08-29.mp3",
+   "start": 464.72,
+   "end": 465.001,
+   "sec": 0.281
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Best_Night_Prayer_for_Deep_Sleep_God_Is_Still_Speaking_in_the_Quiet_Psalm_121_&_Lamentations_3_2025-08-29.mp3",
+   "start": 411.9,
+   "end": 412.179,
+   "sec": 0.279
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Sleep_in_Grace_Best_Night_Prayer_Psalm121_Lamentations3_2025-09-02.mp3",
+   "start": 411.98,
+   "end": 412.257,
+   "sec": 0.277
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Peace_Beyond_Understanding_Bedtime_Prayer_from_Philippians_4_6–7 2025-09-04.mp3",
+   "start": 349.14,
+   "end": 349.407,
+   "sec": 0.267
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Best_Night_Prayer_for_Deep_Sleep_God_Is_Still_Speaking_in_the_Quiet_Psalm_121_&_Lamentations_3_2025-08-29.mp3",
+   "start": 184.36,
+   "end": 184.625,
+   "sec": 0.265
+  },
+  {
+   "master": "/Users/z/Studio/Library/sg/assets/vo/Locke/ElevenLabs_Sleep_in_Grace_Best_Night_Prayer_Psalm121_Lamentations3_2025-09-02.mp3",
+   "start": 184.44,
+   "end": 184.703,
+   "sec": 0.263
+  }
+ ]
+}

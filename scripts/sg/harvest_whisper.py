@@ -124,13 +124,7 @@ def run(cmd: list[str], env: dict | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, env=e)
 
 
-def probe_duration(path: Path) -> float:
-    r = run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
-             "-of", "default=noprint_wrappers=1:nokey=1", str(path)])
-    try:
-        return float(r.stdout.strip())
-    except ValueError:
-        return 0.0
+from sg_media import probe_duration  # noqa: E402,F401  契约:测不出返回 None
 
 
 def parse_ts(ts: str) -> float:
@@ -172,9 +166,78 @@ def to_wav16k(src: Path, dst: Path) -> Path:
     return dst
 
 
-def whisper_words(wav: Path, model: Path, work: Path) -> list[Word]:
+def span_phrases(wav: Path, model: Path, work: Path,
+                 min_sil: float = 0.8, pad: float = 0.12,
+                 min_speech: float = 0.9) -> list[tuple[float, float, str]]:
+    """按静音切段、逐段转写 —— 幻觉母带的专用采集路径。
+
+    词级路径(whisper -ml 1 全轨转写)在超慢、长静默的母带上必然幻觉:
+    whisper 把静音听成成串的 you / Thank you。两个「便宜方案」都实测失败:
+      · --vad:幻觉是没了,但句间静音被从解码器眼前拿掉,分组器失去切分
+        依据,产出中位 13.7s 的逗号连读大块团(48 条,粒度废了)
+      · -nth 0.30:词数 3109/4086,与幻觉原值分毫不差 —— 该阈值只在
+        logprob 联动失败时生效,对自信的幻觉毫无作用
+    这里用 qc_session B 层验证过的第三条路:silencedetect 找语音段
+    (边界是**真实母带时间戳**),每段单独送 whisper —— 静音根本不进解码器,
+    幻觉无从发生;段间静音 ≥0.8s 天然就是句界,粒度即句子。
+    """
+    total = probe_duration(wav) or 0.0
+    r = run(["ffmpeg", "-hide_banner", "-i", str(wav), "-af",
+             f"silencedetect=noise=-45dB:d={min_sil}", "-f", "null", "-"])
+    sil, cur = [], None
+    for kind, val in re.findall(r"silence_(start|end): ([-\d.]+)", r.stderr):
+        v = float(val)
+        if kind == "start":
+            cur = v
+        elif cur is not None:
+            sil.append((cur, v))
+            cur = None
+    if cur is not None:
+        sil.append((cur, total))
+    spans, t = [], 0.0
+    for s, e in sil:
+        if s - t >= min_speech:
+            spans.append((max(0.0, t - pad), min(total, s + pad)))
+        t = e
+    if total - t >= min_speech:
+        spans.append((max(0.0, t - pad), total))
+    print(f"  span 模式:语音段 {len(spans)} 个(静音≥{min_sil}s 为界)")
+
+    out: list[tuple[float, float, str]] = []
+    d = work / (wav.stem + "_spans")
+    d.mkdir(exist_ok=True)
+    clips = []
+    for i, (t0, t1) in enumerate(spans):
+        w = d / f"{i:04d}.wav"
+        rr = run(["ffmpeg", "-y", "-v", "error", "-ss", f"{t0:.3f}",
+                  "-to", f"{t1:.3f}", "-i", str(wav), str(w)])
+        if rr.returncode == 0 and w.exists():
+            clips.append((t0, t1, w))
+    for b in range(0, len(clips), 120):
+        run([WHISPER_CLI, "-m", str(model), "-nt", "-l", "en", "-otxt"]
+            + [str(w) for _, _, w in clips[b:b + 120]])
+    halluc = {"you", "thank you", "bye", "so", "thanks for watching", "", "u"}
+    for t0, t1, w in clips:
+        f = Path(str(w) + ".txt")
+        text = " ".join(f.read_text(errors="ignore").split()) if f.exists() else ""
+        if text.strip().lower().rstrip(".") in halluc:
+            continue
+        out.append((round(t0, 3), round(t1, 3), text))
+    return out
+
+
+def whisper_words(wav: Path, model: Path, work: Path,
+                  nth: float | None = None,
+                  vad_model: Path | None = None) -> list[Word]:
     """Run whisper-cli word-level; return Word list."""
-    out_base = work / (wav.stem + "_w")
+    # 缓存名带上参数指纹:换了阈值/VAD 必须重转写,否则「重采」只是重读旧缓存,
+    # 幻觉一个不少 —— 看起来做了事,实际什么都没变。
+    tag = ""
+    if nth is not None:
+        tag += f"_nth{nth:g}"
+    if vad_model is not None:
+        tag += "_vad"
+    out_base = work / (wav.stem + "_w" + tag)
     json_path = Path(str(out_base) + ".json")
     # Reuse cache if present and newer than wav
     if json_path.exists() and json_path.stat().st_mtime >= wav.stat().st_mtime:
@@ -189,8 +252,12 @@ def whisper_words(wav: Path, model: Path, work: Path) -> list[Word]:
             "-oj",
             "-of", str(out_base),
             "-t", "6",
-            str(wav),
         ]
+        if nth is not None:
+            cmd += ["-nth", f"{nth:g}"]
+        if vad_model is not None:
+            cmd += ["--vad", "--vad-model", str(vad_model)]
+        cmd.append(str(wav))
         print(f"  whisper… {wav.name}")
         r = run(cmd)
         if r.returncode != 0 and not json_path.exists():
@@ -376,6 +443,51 @@ def role_from_text(text: str, pos: float, dur: float, src_tags: list[str],
     return role, tags
 
 
+def _emit_atom(master: Path, t0: float, t1: float, text: str, pos: float,
+               stags: list[str], positional: bool,
+               root: Path, all_atoms: list["Atom"]) -> None:
+    """一条短语 → 一条原子(导出音频 + 边车 + 入 all_atoms)。
+
+    词级路径与 span 路径共用 —— 此前这段只在词级循环里,span 模式若另抄一份,
+    时长探测的「绝不退回母带跨度」等保命细节就会分头演化。
+    """
+    dur = t1 - t0
+    role, tags = role_from_text(text, pos, dur, stags, positional)
+    hid = hashlib.sha1(f"{master.name}:{t0:.3f}:{text}".encode()).hexdigest()[:10]
+    aid = f"{role}_{hid}"
+    out = root / role / f"{aid}.mp3"
+    if not export_clip(master, t0, t1, out):
+        print(f"  export fail {t0:.1f}-{t1:.1f} {text[:40]}")
+        return
+    # 时长以**导出文件**为准,探测不出就重试一次;仍失败则整条不入库。
+    # 绝不退回母带跨度 (t1-t0):两者能差出 7 秒,而下游拿它算语速、
+    # 排停顿、估长度 —— 与其入库一个错数,不如少一条原子。
+    real_dur = probe_duration(out)
+    if real_dur is None:
+        real_dur = probe_duration(out)
+    if real_dur is None or real_dur <= 0:
+        print(f"  ⚠ 时长探测失败,该原子不入库: {aid} 「{text[:40]}」")
+        return
+    atom = Atom(
+        id=aid,
+        path=str(out),
+        source_master=str(master),
+        voice="Locke",
+        t_start=round(t0, 3),
+        t_end=round(t1, 3),
+        duration_sec=round(real_dur, 3),
+        role=role,
+        tags=tags,
+        text=text,
+        method="whisper_cpp_large_v3_turbo",
+        created_at=datetime.now(timezone.utc).isoformat(),
+    )
+    out.with_suffix(".json").write_text(
+        json.dumps(asdict(atom), ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    all_atoms.append(atom)
+
+
 def export_clip(src: Path, t0: float, t1: float, dst: Path) -> bool:
     dst.parent.mkdir(parents=True, exist_ok=True)
     length = max(0.05, t1 - t0)
@@ -404,6 +516,15 @@ def main() -> int:
     ap.add_argument("--only", action="append", default=None,
                     help="只采集文件名含该子串的母带(可多次);增量采集用,"
                          "避免覆盖已重标注的旧原子")
+    ap.add_argument("--nth", type=float, default=None,
+                    help="whisper 无语音阈值(-nth,默认 0.60)。调低更易把静音判为"
+                         "静音 —— 压幻觉用,重采幻觉母带时建议 0.30")
+    ap.add_argument("--vad-model", type=Path, default=None,
+                    help="silero VAD 模型路径;给了就开 --vad,静音段根本不进解码器"
+                         "(比 -nth 更根治:幻觉多发于长静音)")
+    ap.add_argument("--span-mode", action="store_true",
+                    help="按静音切段、逐段转写(幻觉母带专用)。静音不进解码器,"
+                         "段边界即真实句界;--vad 与 -nth 两条路都实测失败后所立")
     args = ap.parse_args()
 
     model = resolve_model(args.model)
@@ -431,10 +552,27 @@ def main() -> int:
     all_atoms: list[Atom] = []
 
     for mi, master in enumerate(masters, 1):
-        print(f"\n[{mi}/{len(masters)}] {master.name} ({probe_duration(master)/60:.1f} min)")
+        mdur = probe_duration(master)
+        print(f"\n[{mi}/{len(masters)}] {master.name} "
+              f"({mdur/60:.1f} min)" if mdur else f"(时长未知)")
         wav = to_wav16k(master, args.work / f"{master.stem}.wav")
+        if args.span_mode:
+            try:
+                phrases = span_phrases(wav, model, args.work)
+            except Exception as e:
+                print(f"  SPAN FAIL: {e}", file=sys.stderr)
+                continue
+            print(f"  phrases={len(phrases)}")
+            stags = source_tags(master.name)
+            positional = not re.search(r"_G\d+_", master.name)
+            n = max(len(phrases) - 1, 1)
+            for i, (t0, t1, text) in enumerate(phrases):
+                _emit_atom(master, t0, t1, text, i / n, stags, positional,
+                           root, all_atoms)
+            continue
         try:
-            words = whisper_words(wav, model, args.work)
+            words = whisper_words(wav, model, args.work,
+                                  nth=args.nth, vad_model=args.vad_model)
         except Exception as e:
             print(f"  WHISPER FAIL: {e}", file=sys.stderr)
             continue
@@ -451,33 +589,8 @@ def main() -> int:
         positional = not re.search(r"_G\d+_", master.name)
         n = max(len(phrases) - 1, 1)
         for i, (t0, t1, text) in enumerate(phrases):
-            pos = i / n
-            dur = t1 - t0
-            role, tags = role_from_text(text, pos, dur, stags, positional)
-            hid = hashlib.sha1(f"{master.name}:{t0:.3f}:{text}".encode()).hexdigest()[:10]
-            aid = f"{role}_{hid}"
-            out = root / role / f"{aid}.mp3"
-            if not export_clip(master, t0, t1, out):
-                print(f"  export fail {t0:.1f}-{t1:.1f} {text[:40]}")
-                continue
-            atom = Atom(
-                id=aid,
-                path=str(out),
-                source_master=str(master),
-                voice="Locke",
-                t_start=round(t0, 3),
-                t_end=round(t1, 3),
-                duration_sec=round(probe_duration(out) or (t1 - t0), 3),
-                role=role,
-                tags=tags,
-                text=text,
-                method="whisper_cpp_large_v3_turbo",
-                created_at=datetime.now(timezone.utc).isoformat(),
-            )
-            out.with_suffix(".json").write_text(
-                json.dumps(asdict(atom), ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-            all_atoms.append(atom)
+            _emit_atom(master, t0, t1, text, i / n, stags, positional,
+                       root, all_atoms)
 
     roles = Counter(a.role for a in all_atoms)
     with_text = sum(1 for a in all_atoms if a.text)
@@ -500,6 +613,23 @@ def main() -> int:
         "atoms": [asdict(a) for a in all_atoms],
     }
     man = root / "manifest.json"
+    if args.only and man.exists():
+        # —— 增量采集必须**合并**,不能覆写 ——
+        # manifest 里躺着全库的隔离标记、边界审计、addressee、时长校正,
+        # 是几天审计工作的唯一载体。此前 --only 的帮助文案写着「避免覆盖」,
+        # 写盘却只写本次的原子 —— 跑一次就会把 2214 条记录抹成几十条。
+        # 合并规则:被重采母带的旧记录整体退场(新旧 id 因切点不同对不上,
+        # 留着只会新旧混杂),其余母带的记录原样保留。
+        old = json.loads(man.read_text(encoding="utf-8"))
+        redone = {str(m) for m in masters}
+        kept = [x for x in old.get("atoms", [])
+                if x.get("source_master") not in redone]
+        dropped = len(old.get("atoms", [])) - len(kept)
+        manifest["atoms"] = kept + manifest["atoms"]
+        manifest["count"] = len(manifest["atoms"])
+        print(f"  合并:保留其它母带 {len(kept)} 条,替换被重采母带旧记录 {dropped} 条")
+        print(f"  ⚠ 新原子未经审计,不在白名单 —— 须走完审计链后"
+              f" verify_atom_texts --mark --write-whitelist")
     man.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     # also keep transcripts index
     tx = root / "transcripts_index.jsonl"

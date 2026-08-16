@@ -20,7 +20,7 @@ import json
 import re
 from pathlib import Path
 
-from atom_quality import MIN_WORDS, key, usable, words
+from atom_quality import MIN_WORDS, key, load_whitelist, usable, words
 
 MANIFEST = Path.home() / "Studio/Library/sg/atoms/manifest.json"
 SCRIPTS = Path.home() / "Studio/Library/sg/catalog/scripts"
@@ -58,10 +58,12 @@ DIVINE = re.compile(r"\bI (am with you|will strengthen|will uphold|give them|"
 def library_keys() -> set[str]:
     """库中**已可用**的文案 —— 用来避免重复付费录已有内容。
 
-    注意用的是 atom_quality.usable:被隔离或文本错配的原子不算「库里已有」,
-    否则它们的假文本会挡住真正需要补录的句子。"""
+    注意用的是 atom_quality.usable + 白名单:被隔离、文本错配、或未过
+    whisper 复核的原子都不算「库里已有」——否则它们的假文本会挡住
+    真正需要补录的句子。"""
+    wl = load_whitelist()
     man = json.loads(MANIFEST.read_text())
-    return {key(x["text"]) for x in man["atoms"] if usable(x)}
+    return {key(x["text"]) for x in man["atoms"] if usable(x, wl)}
 
 
 def existing_batches(exclude: str) -> set[str]:

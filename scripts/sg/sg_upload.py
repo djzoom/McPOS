@@ -116,14 +116,29 @@ def upload_media(yt, video_path: Path, body: dict) -> str:
     return resp["id"]
 
 
-def upload_caption(yt, video_id: str, srt_path: Path) -> None:
+def upload_caption(yt, video_id: str, srt_path: Path,
+                   language: str = "en", name: str = "English") -> None:
+    """挂一条字幕轨。
+
+    language 必须传对:此前这里把语言硬编码成 en,于是本地明明生成了
+    简繁两版中文字幕(zh-Hans/zh-Hant),平台上却只有英文轨 —— 做出来的
+    东西没送到观众面前,和没做一样。
+    """
     from googleapiclient.http import MediaFileUpload
     yt.captions().insert(
         part="snippet",
-        body={"snippet": {"videoId": video_id, "language": "en",
-                          "name": "English", "isDraft": False}},
+        body={"snippet": {"videoId": video_id, "language": language,
+                          "name": name, "isDraft": False}},
         media_body=MediaFileUpload(str(srt_path), mimetype="application/octet-stream"),
     ).execute()
+
+
+# 每期要挂的字幕轨:后缀 → (语言代码, 轨道名)
+CAPTION_TRACKS = [
+    ("",           "en",      "English"),
+    (".zh-Hans",   "zh-Hans", "简体中文"),
+    (".zh-Hant",   "zh-Hant", "繁體中文"),
+]
 
 
 def set_thumbnail(yt, video_id: str, thumb_path: Path) -> None:
@@ -155,6 +170,51 @@ def cmd_status(_a) -> None:
     print(f"token:          {'✅ 有效' if creds else '⚠️ 失效(需重新 auth)'}")
 
 
+def cmd_reschedule(a) -> None:
+    """把主表里标记 reschedule_needed 的期次,在平台端改 publishAt。
+
+    排播节奏变更(2026-08-14:日更改周更)时,已上传的期次在 YouTube 上
+    还挂着旧的定时公开 —— 不改,它们会按旧日期自己公开出去。
+    videos.update 每次 ~50u,走配额账本;改完清标记、回填主表。
+    """
+    import quota
+    master_path = ROOT / "config" / "sg_schedule_master.json"
+    master = json.loads(master_path.read_text(encoding="utf-8"))
+    todo = [r for r in master.get("episodes", [])
+            if r.get("reschedule_needed") and r.get("video_id")]
+    if not todo:
+        print("没有待改期的期次")
+        return
+    if a.dry_run:
+        for r in todo:
+            print(f"  DRY #{r['episode_number']} {r['video_id']} → {r['publish_at']}")
+        print(f"(共 {len(todo)} 期,实跑需 {50*len(todo)}u)")
+        return
+    cost = 50 * len(todo)
+    if not quota.can_afford(cost):
+        print(f"⛔ 配额不足(需 {cost}u)—— 等太平洋时间午夜重置后再跑")
+        return
+    yt = build_service()
+    with upload_link_lock("sg-reschedule"):
+        for r in todo:
+            yt.videos().update(part="status", body={
+                "id": r["video_id"],
+                "status": {"privacyStatus": "private",
+                           "publishAt": r["publish_at"],
+                           "selfDeclaredMadeForKids": False},
+            }).execute()
+            quota.record("videos.update", f"reschedule #{r['episode_number']}")
+            r.pop("reschedule_needed", None)
+            print(f"  ✅ #{r['episode_number']} {r['video_id']} → publishAt {r['publish_at']}")
+    if not a.dry_run:
+        bak = master_path.with_suffix(".json.bak_resched")
+        if not bak.exists():
+            bak.write_text(master_path.read_text(encoding="utf-8"))
+        master_path.write_text(json.dumps(master, ensure_ascii=False, indent=1),
+                               encoding="utf-8")
+        print("主表已回填")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="SG YouTube OAuth/上传核心")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -162,8 +222,11 @@ def main() -> int:
     pa.add_argument("--secrets", type=Path, help="client_secret.json 路径")
     pa.add_argument("--reset", action="store_true", help="清除旧 token")
     sub.add_parser("status", help="凭证状态")
+    pr = sub.add_parser("reschedule", help="平台端改期(主表 reschedule_needed 标记)")
+    pr.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
-    {"auth": cmd_auth, "status": cmd_status}[a.cmd](a)
+    {"auth": cmd_auth, "status": cmd_status,
+     "reschedule": cmd_reschedule}[a.cmd](a)
     return 0
 
 

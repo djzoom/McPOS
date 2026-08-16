@@ -3,7 +3,15 @@
 多频道 YouTube 内容生产系统。三个频道：**KAT**（LoFi 电台）· **RBR**（跑步音乐，
 真代码不在本仓，见下）· **SG**（Sleep in Grace，睡前祷告冥想）。
 
-本仓当前的活口是 **SG 长片线**（`scripts/sg/`）。
+本仓当前的活口是 **SG 长片线**（`scripts/sg/`）。**频道已于 2026-08-15 开播。**
+
+> ## 🔄 新会话从这里开始
+> ```bash
+> ./.venv/bin/python scripts/sg/sg_status.py            # 现在到哪了(一屏)
+> ./.venv/bin/python scripts/sg/daily_ops.py --dry-run  # 今天该做什么
+> ```
+> 交接文档 **`scripts/sg/RESUME.md`**（现状 / 下一件大事 / 八个别再踩的坑）。
+> 状态一律现场读，不看写死的数字。管线冻结清单见 `scripts/sg/PIPELINE_FREEZE.md`。
 
 ## ⚠️ 三条会出事的红线
 
@@ -86,11 +94,21 @@ python scripts/sg/audit_atom_health.py --limit 200    # 快速抽查
 python scripts/sg/audit_atom_health.py --json out.json
 ```
 
-### 修复三层（尚未动手）
+### 修复三层
 
-1. **止血**：让 `build_session` 消费白名单，可用原子 2214 → 827
+1. ~~**止血**~~ ✅ 2026-08-10 完成：白名单成为 `atom_quality.reject_reason` 的
+   显式第三道门（选片/盘点侧传入 `load_whitelist()`，审计侧不传——它们是
+   产出复核数据的一环，卡白名单是循环依赖）。消费方：`build_session` /
+   `inventory` / `build_tts_batch`。可用原子 2214 → **728**（白名单 827 中
+   99 条另被隔离/词数门拒）。验收：试排一期 68 原子全部在白名单内；
+   20 期连排 20/20 出片、A 层零失败。**但平均重叠 24.9%、最高 85.7%，
+   未达稳定标准——池子太小，靠补料解决，不是代码问题。**
+   顺带修复：`build_session.py` 的 `a.minutes` NameError（08-08 入库时的
+   笔误，之后编排器从未成功跑通过）。
+   另发现：盘点槽位模型说 BLESS 池=0/可出 0 期，但编排器用 close 角色
+   回退填了 BLESS——两者对 BLESS 槽位角色的判据不一致，待对齐。
 2. **补料**：重跑那两支母带的 harvest（开 VAD / 调 no-speech 阈值压幻觉）；
-   顺带审计从没查过的 453 个
+   顺带审计从没查过的 453 个（复核通过即可扩充白名单，直接缓解重叠率）
 3. **重建**：8 支 qc0x + `sg_toytune_ep1` 作废重建
 
 ## SG 线的其它现状
@@ -108,6 +126,13 @@ python scripts/sg/audit_atom_health.py --json out.json
 | `scripts/sg/harvest_whisper.py` | 516 | 母带 → 原子采集（whisper 词级切分 + 分组）← **故障源头** |
 | `scripts/sg/render_rings_long.py` | 483 | 金环层渲染器。事件从既有音频**反导** |
 | `scripts/sg/qc_session.py` | 311 | 验收层（A 文案 6 项 / B 音频 3 项） |
+| `scripts/sg/vo_score.py` | — | VO 检测门（时序/清晰度/结构打分，≥95 放行，2026-08-10 新增，内建于 build_session） |
+| `scripts/sg/audit_atom_edges.py` | — | 量原子**自身**尾部电平 → `tail_hard_cut`；兼查 manifest 时长漂移（2026-08-11 新增） |
+| `scripts/sg/repair_session.py` | — | 对既有成片只做 DROP：剪掉坏原子后原地重出 VO/字幕/混音（2026-08-11 新增） |
+| `scripts/sg/audit_fragment_artifacts.py` | — | 靠统计指纹揪采集痕迹：等长切割 + 截断重复（2026-08-12 新增） |
+| `scripts/sg/release_gate.py` | — | **单一发布裁决**：R1 产物齐全 / R2 内容 / R3 VO≥95 / R4 音画 / R5 边界 / R6 中文字幕 / R7 时长（2026-08-12 新增） |
+| `scripts/sg/build_until_pass.py` | — | 换种子重排直到过 95 分门槛——保标准，不降标准（2026-08-12 新增） |
+| `scripts/sg/build_zh_srt.py` | 193 | 译表 + 英文 SRT → 简繁中文 SRT，十道门禁；**不做翻译** |
 | `scripts/sg/atom_quality.py` | 96 | 选曲判据 ← **只看文本，不看音频，是漏网的地方** |
 | `scripts/sg/audit_atom_health.py` | — | 全量健康体检（2026-08-08 新增） |
 
@@ -123,8 +148,58 @@ python scripts/sg/audit_atom_health.py --json out.json
   `Co-Authored-By: Claude` 尾注与 `Generated with Claude Code` 行。Claude 是工具，不是贡献者。
 - 当前分支 `cleanup/modularization`，与 `origin/cleanup/modularization` 同步。
 
+## 冻结状态
+
+SG 长片线已冻结为 **v2（2026-08-13）**，清单见
+`scripts/sg/PIPELINE_FREEZE.md`：核心链路 17 个脚本、辅助线与废弃线的分类、
+每条判据的实测依据、以及改动后必须重跑的三项验收。
+
+## 发布前必过：`release_gate.py`
+
+```bash
+./.venv/bin/python scripts/sg/release_gate.py --session sg_gold_001   # 单期，含 R4
+./.venv/bin/python scripts/sg/release_gate.py --all --fast            # 全部，跳过 whisper
+```
+
+七关任一不过即不可发布。**`--fast` 只用于迭代中途自查**——只有 R4 能发现
+音频与字幕对不上，发布前必须跑全套。门禁一律现场重算，不读 session.json
+里存的旧结论（qc03 实测：读快照会把 45.6% 病态原子的一期判成全绿）。
+
+## 原子库现状（2026-08-12 全量复核后）
+
+```
+2214 条 · 可用约 1290（此前白名单只放行 728）
+  逐条转写复核 1396 条：完全一致 98.4% · 仅转写差异 1.6% · 不符 5 条已隔离
+  隔离：no_speech 432 · fixed_length_cut 85 · text_mismatch 69
+        truncated_duplicate 11 · self-deification 11 · dropped_in_review 10
+        misread_negation_lost 1
+  自由可用唯一文案约 770 → 瓶颈槽位 CLOSE（仅 7 条唯一强结尾）
+```
+
+**剪掉即除名**：`repair_session.py` 从成片剪掉的原子，默认同时写入
+`quarantined=dropped_in_review`。此前只剪不除名，导致第 1/2/3 期各自剪掉的
+坏句在第 4 期又被选了回来，一轮轮重演。
+
+**连排能力受素材而非算法限制**：cooldown 窗口 12 期 × 每期约 100 句 = 需要
+1200 条不同文案，实有 771。8 期连排平均重叠 5.5%、最高 12.9%（门槛 25%/60%）；
+20 期则必然超标——`stability_check.py` 现在会明确指出这是供给不足而非编排缺陷。
+
 ## 待办
 
 - [ ] 把 `config/google/` 与 `config/config.yaml` 加进 `.gitignore`（公开仓库，现在只靠「记得别 add -A」挡着）
-- [ ] 原子库修复三层（见上）
+- [ ] 原子库修复：~~① 止血~~ ✅ → ② 补料 → ③ 重建（见上）
 - [ ] SG OAuth 重新授权
+- [ ] 盘点与编排器对 BLESS 槽位角色回退的判据对齐（止血验收时发现）
+- [x] 尾词被削的源头治理（2026-08-11）：`tail_cut`（母带丢词）与 `tail_hard_cut`
+      （自身满音量）两项独立证据**双证**才算确凿；补救容差从 18s 收到 0.35s。
+      顺带修掉 222 条 manifest 时长漂移。详见 VO_PIPELINE 第 2′/2″ 节。
+- [x] 英文 SRT 排版修正（2026-08-12）：`subtitle_typography()`，烧录字幕与外挂
+      SRT 共用同一函数，不会分头演化。
+- [ ] 库里仍有一条已知坏原子未除名：`Psalm 34, verse 18. Psalm 34, verse 18.`
+      （出处重复）。它不在任何成片里，故没走「剪除即除名」的路径。
+- [ ] 补料（G3 录制）：按 `scripts/sg/ATOM_SUPPLY_PLAN.md` 执行——三条轨道
+      （零成本回收 → 按杠杆装箱录制 → 结构杠杆），每批五道验收门。
+      现状 7 期不重样，瓶颈 CLOSE（仅 7 条唯一收尾）；4 个月到供需比 ≥1.0。
+- [x] VO 检测门（2026-08-10）：`vo_score.py` 内建于 build_session，六个编排
+      缺陷修复后 30 个种子（含 20 个未调参的）连过 95+，其中 26 个满分。
+      细节见 `scripts/sg/VO_PIPELINE.md`「VO 检测门」一节。

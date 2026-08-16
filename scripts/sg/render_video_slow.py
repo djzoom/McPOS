@@ -29,15 +29,7 @@ def run(cmd: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True)
 
 
-def probe_duration(path: Path) -> float:
-    r = run([
-        "ffprobe", "-v", "error", "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1", str(path),
-    ])
-    try:
-        return float(r.stdout.strip())
-    except ValueError:
-        return 0.0
+from sg_media import probe_duration, probe_duration_or_die  # noqa: E402,F401
 
 
 def pick_video(video_dir: Path, seed: int | None = None) -> Path:
