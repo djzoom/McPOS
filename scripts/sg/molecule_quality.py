@@ -47,13 +47,18 @@ def perspective(text: str) -> str:
     """语段主导视角:Y(对听者说) / W(众人祷告) / N(中性祈使)。
 
     出片端(视角塑形)与内容门(G8 轨迹判定)共用 —— 判据两处定义迟早漂移。
+
+    判别标志是 we/us/our 的**有无**,不是 you/we 计数之比:祷告段里的
+    「You」指上帝(「We lie down… You are faithful」),you 计数必然高,
+    比数会误判成对听者说;而纯安抚段**永远不会**出现 we/us/our。
+    (2026-08-17 john10 末块实测:we=2 you=5,按比数误判 Y,按有无正判 W。)
     """
     low = f" {(text or '').lower()} "
     w = sum(low.count(f" {x} ") for x in ("we", "us", "our", "ours"))
     y = sum(low.count(f" {x} ") for x in ("you", "your", "yours", "you're"))
-    if w == y == 0:
-        return "N"
-    return "W" if w > y else "Y"
+    if w > 0:
+        return "W"
+    return "Y" if y > 0 else "N"
 
 
 def internal_repeat(text: str) -> bool:
