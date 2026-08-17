@@ -33,10 +33,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_session import build_srt                      # noqa: E402
 from harvest_whisper import resolve_model, span_phrases, to_wav16k  # noqa: E402
-from molecule_quality import text_complete                # noqa: E402
+from molecule_quality import perspective, text_complete   # noqa: E402
 from sg_media import probe_duration                       # noqa: E402
 
 WORK = Path.home() / "Studio/Workspace/temp/sg_content_gate"
+ROOT_CFG = Path(__file__).resolve().parents[2] / "config"
 
 # ── 门槛 ──
 # 听感分块阈值 10s 的依据:母带内部停顿实测最长 7.9s(1914 个停顿中
@@ -82,9 +83,58 @@ def group_blocks(utts: list[tuple[float, float, str]]
     return blocks
 
 
+def _norm_words(t: str) -> list[str]:
+    return re.sub(r"[^a-z0-9' ]", " ", t.lower()).split()
+
+
+def _tok_close(a: str, b: str) -> bool:
+    """两个词是否算「同一个词的 ASR 噪声」:前缀重合 ≥5 或同为数字。
+
+    whisper/whisperer、25/23(引用数字)—— 音频无损,是转写拼写噪声。
+    """
+    if a == b:
+        return True
+    if a.isdigit() and b.isdigit():
+        return True
+    n = min(len(a), len(b))
+    return n >= 5 and a[:5] == b[:5]
+
+
+def _arbitrate(mol_path: str, model, heard: str, lib: str) -> str:
+    """三方仲裁:对该分子单独的 mp3 做第三次独立转写,谁与它一致谁是真相。
+
+    返回 'render_bad'(成片真变形,判死刑) / 'library_bad'(库文本失真,
+    成片无辜,分子进修复队列) / 'unclear'(裁不动,从严判死刑)。
+    """
+    import difflib
+    p = Path(mol_path)
+    if not p.exists():
+        return "unclear"
+    wav = to_wav16k(p, WORK / (p.stem + "_arb.wav"))
+    from harvest_whisper import run as _hrun, WHISPER_CLI
+    _hrun([WHISPER_CLI, "-m", str(model), "-nt", "-l", "en", "-otxt", str(wav)])
+    txt = Path(str(wav) + ".txt")
+    clip = " ".join(txt.read_text(errors="ignore").split()) if txt.exists() else ""
+    if not clip:
+        return "unclear"
+    s_heard = difflib.SequenceMatcher(None, _norm_words(heard),
+                                      _norm_words(clip)).ratio()
+    s_lib = difflib.SequenceMatcher(None, _norm_words(lib),
+                                    _norm_words(clip)).ratio()
+    if s_heard - s_lib > 0.05:
+        return "library_bad"
+    if s_lib - s_heard > 0.05:
+        return "render_bad"
+    return "unclear"
+
+
 def judge(blocks: list[dict], vo_ends: float, total: float,
-          claimed: list[str], primary: str) -> dict:
+          claimed: list[str], primary: str,
+          lib_texts: list[tuple[str, str, str]] | None = None,
+          model=None, mix_path=None) -> dict:
     checks: dict[str, dict] = {}
+    judge.model = model
+    judge.mix_path = mix_path
 
     bad = [i for i, b in enumerate(blocks) if text_complete(b["text"])]
     checks["G1_blocks_complete"] = {
@@ -135,6 +185,87 @@ def judge(blocks: list[dict], vo_ends: float, total: float,
     checks["G6_pace"] = {
         "pass": RATE_MIN <= rate <= RATE_MAX,
         "detail": f"{rate:.2f} 词/秒({RATE_MIN}–{RATE_MAX})"}
+
+    # G7 逐词对账:成片听到的每一块,与库内该段**应该说的词**逐词比对。
+    # 库文本是采集时对母带的独立转写(固定事实,不是编排的产物);两次
+    # whisper 的噪声用相似度容差吸收,但**首词/尾词缺失零容忍** ——
+    # 那正是「词没读完」的直接证据。
+    import difflib
+    if lib_texts is not None:
+        probs: list[str] = []
+        suspects: list[str] = []   # 库文本失真的分子(修复队列,不判成片死刑)
+        if len(blocks) != len(lib_texts):
+            probs.append(f"块数 {len(blocks)} ≠ 选段数 {len(lib_texts)}(成片变形)")
+        else:
+            for i, (b, (ref, mid, mpath)) in enumerate(zip(blocks, lib_texts)):
+                hw, rw = _norm_words(b["text"]), _norm_words(ref)
+                if not rw:
+                    continue
+                sim = difflib.SequenceMatcher(None, hw, rw).ratio()
+                head_bad = hw and rw and not _tok_close(hw[0], rw[0]) \
+                    and rw[0] not in hw[:3]
+                tail_bad = hw and rw and not _tok_close(hw[-1], rw[-1]) \
+                    and rw[-1] not in hw[-3:]
+                if sim >= 0.82 and not head_bad and not tail_bad:
+                    continue
+                # 争议 → 三方仲裁(对该分子 mp3 独立转写)
+                verdict = _arbitrate(mpath, judge.model, b["text"], ref)
+                if verdict == "library_bad":
+                    suspects.append(mid)
+                    continue
+                why = (f"相似度 {sim:.2f}" if sim < 0.82 else
+                       f"{'首' if head_bad else '尾'}词缺失")
+                probs.append(f"块{i} {why}(仲裁:{verdict})"
+                             f"应「…{' '.join(rw[-4:])}」闻「…{' '.join(hw[-4:])}」")
+        checks["G7_words_intact"] = {
+            "pass": not probs,
+            "detail": (probs or [f"{len(blocks)} 块逐词对账全符"])
+            + ([f"库文本失真 {len(suspects)} 条(进修复队列,不判成片): "
+                + ",".join(suspects)] if suspects else [])}
+        if suspects:
+            q = ROOT_CFG / "sg_molecule_repair_queue.json"
+            old = json.loads(q.read_text()) if q.exists() else []
+            q.write_text(json.dumps(sorted(set(old) | set(suspects)),
+                                    ensure_ascii=False, indent=1))
+
+    # G8 视角轨迹:Y(对你说)→W(我们祷告)是自然的仪式弧线;来回横跳
+    # (Y W Y / W Y W)才是代词混乱。中性块(纯祈使)沿用前一视角。
+    traj, cur = [], None
+    for b in blocks:
+        p = perspective(b["text"])
+        if p != "N":
+            cur = p
+        traj.append(cur or "N")
+    flips = sum(1 for i in range(1, len(traj)) if traj[i] != traj[i - 1])
+    aba = any(traj[i] != traj[i + 1] and traj[i] == traj[i + 2]
+              for i in range(len(traj) - 2))
+    checks["G8_perspective"] = {
+        "pass": flips <= 3 and not aba,
+        "detail": f"轨迹 {''.join(traj)} · 切换 {flips} 次(≤3) · 横跳 {'有' if aba else '无'}"}
+
+    # G9 停顿均匀:间距允许随进度渐长(入睡曲线),不允许突变 ——
+    # 相邻间距之比 ≤2.6(设计随机域的最坏值 ~2.25 留余量)。
+    gaps2 = [blocks[i + 1]["start"] - blocks[i]["end"]
+             for i in range(len(blocks) - 1)]
+    jumps = [f"{gaps2[i]:.0f}s→{gaps2[i+1]:.0f}s"
+             for i in range(len(gaps2) - 1)
+             if max(gaps2[i], gaps2[i + 1]) / max(0.1, min(gaps2[i], gaps2[i + 1])) > 2.6]
+    checks["G9_gap_even"] = {
+        "pass": not jumps,
+        "detail": jumps or f"相邻间距比全部 ≤2.6({len(gaps2)} 个间距)"}
+
+    # G10 响度:基线 = 已公开 Ep1 实测 -28.0 LUFS / TP -6.6(2026-08-17)。
+    # 深夜连听,期与期必须一致;门自己重测成片,不信出片器自报的数。
+    if judge.mix_path is not None:
+        from sg_media import measure_loudness
+        lo = measure_loudness(judge.mix_path)
+        if lo is None:
+            checks["G10_loudness"] = {"pass": False, "detail": "响度测不出"}
+        else:
+            checks["G10_loudness"] = {
+                "pass": -29.5 <= lo["I"] <= -26.5 and lo["TP"] <= -2.0,
+                "detail": f"I={lo['I']:.1f} LUFS(-29.5…-26.5) "
+                          f"TP={lo['TP']:.1f}(≤-2.0) LRA={lo['LRA']:.1f}"}
 
     return {"pass": all(c["pass"] for c in checks.values()), "checks": checks,
             "blocks": len(blocks), "speech_sec": round(speech, 1),
@@ -205,7 +336,18 @@ def main() -> int:
     total = meta.get("total_duration_sec") or probe_duration(vo) or 0.0
     vo_ends = meta.get("vo_ends_sec") or total
     blocks = group_blocks(utts)
-    verdict = judge(blocks, vo_ends, total, claimed, primary)
+    # G7 的对账基准:库内(采集时独立转写的)各选段文本,按选段顺序。
+    lib_texts = None
+    mol_ids = meta.get("molecule_ids")
+    if mol_ids:
+        man = Path.home() / "Studio/Library/sg/molecules/manifest.json"
+        byid = {m["id"]: m
+                for m in json.loads(man.read_text())["molecules"]}
+        lib_texts = [(byid.get(i, {}).get("text", ""), i,
+                      byid.get(i, {}).get("path", "")) for i in mol_ids]
+    mix = meta.get("paths", {}).get("final_mix")
+    verdict = judge(blocks, vo_ends, total, claimed, primary, lib_texts,
+                    model=model, mix_path=Path(mix) if mix else None)
 
     print(f"═══ 内容门 · {eid} ═══")
     for name, c in verdict["checks"].items():
