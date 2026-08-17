@@ -42,6 +42,31 @@ def books_heard(text: str) -> list[str]:
     """文本中听到的经文书卷(去重排序)。"""
     return sorted({norm_book(m.group(1)) for m in REF_RE.finditer(text or "")})
 
+
+def perspective(text: str) -> str:
+    """语段主导视角:Y(对听者说) / W(众人祷告) / N(中性祈使)。
+
+    出片端(视角塑形)与内容门(G8 轨迹判定)共用 —— 判据两处定义迟早漂移。
+    """
+    low = f" {(text or '').lower()} "
+    w = sum(low.count(f" {x} ") for x in ("we", "us", "our", "ours"))
+    y = sum(low.count(f" {x} ") for x in ("you", "your", "yours", "you're"))
+    if w == y == 0:
+        return "N"
+    return "W" if w > y else "Y"
+
+
+def internal_repeat(text: str) -> bool:
+    """整句在段内原样连续出现两次 = whisper 复读幻觉进了库。
+
+    2026-08-17 G7 逐词对账立功:phil4 一条分子库文本是「Let the tension
+    of today melt away.」×2,而成片音频读的是连贯正文 —— 库文本失真,
+    音频无辜。库级判据补此检查,失真文本不得再当对账基准。
+    """
+    sents = [s.strip().lower() for s in re.split(r"[.!?]", text or "")
+             if len(s.split()) >= 4]
+    return any(a == b for a, b in zip(sents, sents[1:]))
+
 # ── 切割(采集端用,依据见模块头)──────────────────────────────
 PARA_SILENCE = 6.0      # 段界:静音 ≥6s(实测 6–10s 族群独立存在,n=211)
 SPAN_PAD = 0.35         # 边界向静音内各让 0.35s 软肩(切点本就在长静默中央)
@@ -165,6 +190,8 @@ def reject_reason(mol: dict) -> str | None:
     t = text_complete(mol.get("text") or "")
     if t:
         return t
+    if internal_repeat(mol.get("text") or ""):
+        return "internal_repeat"
     at_master_head = (mol.get("t_start") or 0) <= SPAN_PAD + 0.05
     for k, reason, waived in (
             ("edge_head_db", "head_cut_into_speech", at_master_head),

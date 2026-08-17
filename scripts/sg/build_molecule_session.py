@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -32,8 +33,15 @@ from build_session import (                    # noqa: E402
     MUSIC_SOURCES, build_music_bed, build_vo_track, duck_mix,
     list_music, load_recent, load_recent_tracks, record_episode,
     record_tracks)
-from molecule_quality import books_heard, reject_reason  # noqa: E402
-from sg_media import probe_duration             # noqa: E402
+from molecule_quality import (                  # noqa: E402
+    books_heard, perspective, reject_reason)
+from sg_media import measure_loudness, probe_duration  # noqa: E402
+
+# 响度目标 = 已公开 Ep1 实测(-28.0 LUFS / TP -6.6)。频道听众深夜连听,
+# 期与期响度必须一致;YouTube 只压不抬(-14 以上才压),此区间安全。
+TARGET_LUFS = -28.0
+LOUD_TOL = 0.8         # 偏差超过此值才动增益;小偏差不折腾
+TP_CEIL = -2.0         # 真峰上限(加了增益也不许贴顶)
 
 MANIFEST = Path.home() / "Studio/Library/sg/molecules/manifest.json"
 DEFAULT_OUT = Path.home() / "Studio/Workspace/outputs/sg/sessions"
@@ -99,6 +107,38 @@ def select_molecules(pool: list[dict], budget_sec: float,
         picked.append(m)
         remain -= m["duration_sec"]
 
+    # 视角塑形:成片应呈单弧线「对你安抚(Y)→众人祷告(W)」。母带原作
+    # 里 Y/W 段落间有过渡段衔接,跳选把过渡抽走后横跳会裸露(2026-08-17
+    # 九期重判:6 期 Y/W 横跳,最多切换 7 次)。做法:在母带顺序上找
+    # 最优分割点(前 Y 后 W 错位最少),弃错位段,用同相候选补预算。
+    picked.sort(key=lambda m: m["span_index"])
+    pers = {m["id"]: perspective(m["text"]) for m in body}
+    seq = [pers[m["id"]] for m in picked]
+    best_s, best_cost = 0, 10 ** 9
+    for s in range(len(seq) + 1):
+        cost = sum(1 for p in seq[:s] if p == "W") \
+            + sum(1 for p in seq[s:] if p == "Y")
+        if cost < best_cost:
+            best_s, best_cost = s, cost
+    if best_cost:
+        split_span = picked[best_s]["span_index"] if best_s < len(picked) \
+            else 10 ** 9
+        misfits = [m for i, m in enumerate(picked)
+                   if (seq[i] == "W" and i < best_s)
+                   or (seq[i] == "Y" and i >= best_s)]
+        for m in misfits:
+            picked.remove(m)
+            print(f"  [视角塑形] 弃错位段 span={m['span_index']}({pers[m['id']]})")
+        refill = [m for m in body
+                  if m not in picked and m not in misfits
+                  and (pers[m["id"]] != "W" if m["span_index"] < split_span
+                       else pers[m["id"]] != "Y")]
+        refill.sort(key=lambda m: (recent.get(m["id"], 0.0), m["span_index"]))
+        lack = min(len(misfits), body_cap - len(picked))
+        for m in refill[:max(0, lack)]:
+            picked.append(m)
+            print(f"  [视角塑形] 补同相段 span={m['span_index']}({pers[m['id']]})")
+
     # 主经文必须被读出声:内容门 G4 要求音频里真实听到主书卷名。
     # 主题池里有朗读引用的分子但子集没带上时,补进来;满员就置换
     # 最热(冷却权重最高)的非引用正文段。
@@ -122,7 +162,28 @@ def select_molecules(pool: list[dict], budget_sec: float,
                 print(f"  [经文保底] 补入 {add['id']}")
             picked.append(add)
 
-    picked.sort(key=lambda m: m["span_index"])   # 回到母带原顺序
+    # 指代悬空护栏:以指示词(That/This/It/These/Those/Such)开头的段落,
+    # 指的是母带里**上一段**说过的东西 —— 上一段没入选就跳选它,听者
+    # 会不知所指。处理:前段在场则留;不在场且补得进就补;补不进就弃。
+    picked.sort(key=lambda m: m["span_index"])
+    ana = re.compile(r"^(That|This|It|These|Those|Such)\b")
+    have = {m["span_index"] for m in [opener] + picked + closers}
+    for m in list(picked):
+        if not ana.match(m["text"].strip()):
+            continue
+        prev_idx = m["span_index"] - 1
+        if prev_idx in have:
+            continue
+        prev = next((x for x in body if x["span_index"] == prev_idx), None)
+        if prev and len(picked) < body_cap:
+            picked.append(prev)
+            have.add(prev_idx)
+            print(f"  [指代护栏] 补入前段 span={prev_idx}(为「{m['text'][:24]}…」)")
+        else:
+            picked.remove(m)
+            have.discard(m["span_index"])
+            print(f"  [指代护栏] 弃选指代悬空段 span={m['span_index']}")
+    picked.sort(key=lambda m: m["span_index"])
     return [opener] + picked + closers
 
 
@@ -218,6 +279,26 @@ def main() -> int:
     duck_mix(music_path, vo_for_mix, final_path,
              bed_volume_db=-16.0, ducking_db=-18.0, vo_gain_db=3.0)
 
+    # 响度归一:静态增益对齐 Ep1 基线(动态 loudnorm 会呼吸泵动,睡眠向
+    # 内容不可接受);增益后真峰越限就按峰让步,宁静勿爆。
+    loud = measure_loudness(final_path)
+    if loud is None:
+        raise SystemExit("响度测不出,拒绝出片(绝不静默兜底)")
+    gain = TARGET_LUFS - loud["I"]
+    if abs(gain) > LOUD_TOL:
+        gain = min(gain, TP_CEIL - loud["TP"])   # 峰值余量封顶
+        tmp = final_path.parent / (final_path.stem + "_loud.mp3")
+        subprocess.run(
+            ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+             "-i", str(final_path), "-af", f"volume={gain:+.2f}dB",
+             "-c:a", "libmp3lame", "-b:a", "192k", str(tmp)], check=True)
+        tmp.replace(final_path)
+        loud = measure_loudness(final_path) or loud
+        print(f"  [响度] 增益 {gain:+.1f} dB → I={loud['I']:.1f} LUFS "
+              f"TP={loud['TP']:.1f}")
+    else:
+        print(f"  [响度] I={loud['I']:.1f} LUFS(基线 {TARGET_LUFS}±{LOUD_TOL},免调)")
+
     meta = {
         "episode_id": eid,
         "pipeline": "molecule_v1",
@@ -235,6 +316,7 @@ def main() -> int:
         "vo_ends_sec": round(vo_dur, 3),
         "music_only_from_sec": round(vo_dur, 3),
         "vo_duration_sec": vo_dur,
+        "loudness": loud,
         "total_duration_sec": probe_duration(final_path),
         "molecule_ids": [m["id"] for m in picked],
         "plan": plan,

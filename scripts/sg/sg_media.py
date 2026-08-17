@@ -61,3 +61,27 @@ def probe_duration_or_die(path: str | Path, what: str = "") -> float:
     if d is None or d <= 0:
         raise SystemExit(f"读不出时长{('(' + what + ')') if what else ''}: {path}")
     return d
+
+
+def measure_loudness(path: str | Path) -> dict | None:
+    """整段响度实测:integrated LUFS / LRA / true peak。探测失败返 None,不猜。
+
+    用 loudnorm 的测量模式(print_format=json)而不是 ebur128 文本抓行 ——
+    JSON 是稳定契约,文本格式随 ffmpeg 版本漂。
+    """
+    import json as _json
+    import re as _re
+    import subprocess as _sp
+    r = _sp.run(
+        ["ffmpeg", "-hide_banner", "-i", str(path),
+         "-af", "loudnorm=print_format=json", "-f", "null", "-"],
+        capture_output=True, text=True)
+    m = _re.search(r"\{[^{}]*\}", r.stderr[-2500:])
+    if not m:
+        return None
+    try:
+        d = _json.loads(m.group(0))
+        return {"I": float(d["input_i"]), "LRA": float(d["input_lra"]),
+                "TP": float(d["input_tp"])}
+    except (KeyError, ValueError):
+        return None
