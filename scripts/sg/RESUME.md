@@ -80,3 +80,26 @@ content_gate.py             独立内容门:只转写成片音频判六项;放�
 - `origin` 是 **public 仓**。**绝不 `git add -A`**,逐路径暂存。
 - 提交身份 `0xGarfield <djwangzhong@gmail.com>`;**提交信息禁止任何 AI 署名**。
 - 密钥 `config/config.yaml`、`config/google/`、`*.bak_*` 已入 `.gitignore`。
+
+## 七、2026-08-17 深夜:人耳审听修复(v3 参数,已锁定)
+
+审听结论(用户提供,ps4a 期):文本完整 8/10、清晰 8/10、**睡眠节奏 6.5、
+混音连续性 6** —— 病根:语速快(141wpm)、音乐抽吸(±13-16dB)、尾声无交代。
+
+已修(全部在 ps4a v3 上十门验证 + 侧信号实测):
+- duck 4:1/2200ms(原 12:1/700ms)→ 音乐涨落 8.2dB(目标 8-12)
+- atempo 0.86 → 121wpm(目标 115-125)
+- 间距 18-30×1.5p 封顶 42;结尾块前 ≤30s(防唤醒)
+- 字幕并句 + 小写头清零;响度门 G10(-28 基线)
+
+**九期 v3 全批次(约 80 分钟,机器空闲时跑)**:
+```bash
+i=300; for t in deut31 isa26 john10 john14 phil4 ps121a ps121b ps16 ps4a; do
+  i=$((i+1)); KMP_DUPLICATE_LIB_OK=TRUE ./.venv/bin/python \
+  scripts/sg/build_molecule_session.py --minutes 30 --seed $i --theme "$t" \
+  --episode-id "sg_mol_v3_$t" --no-history; done
+```
+(幂等:判决在各期 session.json 的 content_gate 字段;正式出片去掉
+--no-history 并用正式期号。)
+
+轨道 B 录制三条硬需求见 ATOM_SUPPLY_PLAN.md 末节(尾声交代段/原生慢读/段落呼吸)。
