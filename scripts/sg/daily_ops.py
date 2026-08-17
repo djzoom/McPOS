@@ -7,10 +7,11 @@
 人来记这些顺序迟早会漏,所以固化成一条命令:
 
     1) 补发置顶评论   已公开却还挂着 comment_pending 的短片(便宜,先做)
-    2) 短片续传       补足「领先公开日 N 天」的缓冲,不多传(配额留给别人)
-    3) 字幕补挂       平台缺的语言轨(中文常因配额分批而剩尾巴)
-    4) 长片补传       主表里还没 video_id 的期次(通常没有,除非新出片)
-    5) 记录运营日志   ops_log --append,当日一条事实
+    2) 撤回续跑       recall_needed 标记未清零就续删(不删会自己播出去)
+    3) 短片续传       补足「领先公开日 N 天」的缓冲,不多传(配额留给别人)
+    4) 字幕补挂       平台缺的语言轨(hold 行没有 video_id,自动跳过)
+    5) 长片补传       主表里还没 video_id 且未冻结(hold)的期次
+    6) 记录运营日志   ops_log --append,当日一条事实
 
 每一步都先问配额够不够,不够就停在那一步并说明 —— 预算制不是重试制。
 
@@ -59,7 +60,7 @@ def step_comments(dry: bool) -> None:
     now = datetime.now(timezone.utc)
     due = {k: v for k, v in pending.items()
            if v.get("publish_at", "9999") <= now.isoformat()}
-    print(f"\n[1/5] 置顶评论:挂起 {len(pending)} 条,其中已公开可发 {len(due)} 条")
+    print(f"\n[1/6] 置顶评论:挂起 {len(pending)} 条,其中已公开可发 {len(due)} 条")
     if not due or dry:
         return
     sys.path.insert(0, str(TOYTUNE))
@@ -94,7 +95,7 @@ def step_shorts(dry: bool) -> None:
     now = datetime.now(timezone.utc).isoformat()
     buffered = sum(1 for v in st.values() if v.get("publish_at", "") > now)
     need = max(0, LEAD_DAYS - buffered)
-    print(f"\n[2/5] 短片:已传 {len(st)} 条 · 未公开缓冲 {buffered} 条 · 需补 {need} 条")
+    print(f"\n[3/6] 短片:已传 {len(st)} 条 · 未公开缓冲 {buffered} 条 · 需补 {need} 条")
     if not need:
         return
     if not quota.can_afford(SHORT_COST * need):
@@ -106,6 +107,22 @@ def step_shorts(dry: bool) -> None:
                    cwd=str(TOYTUNE))
 
 
+def step_recall(dry: bool) -> None:
+    """续跑未完成的撤回 —— 有 recall_needed 标记才动,删干净后永远静默。
+
+    2026-08-17 用户令撤回全部未播长片。当天配额只够删一部分,剩下的
+    期次仍挂着定时公开,拖着不删它会自己播出去 —— 所以这一步必须
+    自动续到清零为止。只认标记,绝不自己扩大删除范围。
+    """
+    master = json.loads((ROOT / "config/sg_schedule_master.json").read_text())
+    flagged = [r for r in master["episodes"] if r.get("recall_needed")]
+    print(f"\n[2/6] 撤回续跑:剩 {len(flagged)} 期待撤")
+    if not flagged:
+        return
+    cmd = [str(PY), str(HERE / "sg_upload.py"), "recall"]
+    subprocess.run(cmd + ["--dry-run"] if dry else cmd)
+
+
 def step_captions(dry: bool) -> None:
     """补挂缺失的字幕轨(尤其中文)。
 
@@ -114,7 +131,7 @@ def step_captions(dry: bool) -> None:
     (Ep8 繁体)卡在配额差 51u。这一步就是让"差一点"自己收尾:
     backfill 幂等,没得补时几秒返回,补得动就补。
     """
-    print("\n[3/5] 字幕补挂")
+    print("\n[4/6] 字幕补挂")
     if dry:
         subprocess.run([str(PY), str(HERE / "backfill_captions.py"), "--dry-run"])
         return
@@ -123,8 +140,9 @@ def step_captions(dry: bool) -> None:
 
 def step_longs(dry: bool) -> None:
     master = json.loads((ROOT / "config/sg_schedule_master.json").read_text())
-    todo = [r for r in master["episodes"] if not r.get("video_id")]
-    print(f"\n[4/5] 长片:待传 {len(todo)} 期")
+    todo = [r for r in master["episodes"]
+            if not r.get("video_id") and not r.get("hold")]
+    print(f"\n[5/6] 长片:待传 {len(todo)} 期")
     if not todo or dry:
         return
     subprocess.run([str(PY), str(HERE / "sg_batch_upload.py")])
@@ -138,10 +156,11 @@ def main() -> int:
     print(f"=== SG 每日运营 · {datetime.now().strftime('%F %H:%M')} ===")
     print(f"配额:已用 {quota.spent_today()}u · 可用 {quota.remaining()}u")
     step_comments(a.dry_run)
+    step_recall(a.dry_run)
     step_shorts(a.dry_run)
     step_captions(a.dry_run)
     step_longs(a.dry_run)
-    print("\n[5/5] 运营日志")
+    print("\n[6/6] 运营日志")
     if not a.dry_run:
         subprocess.run([str(PY), str(HERE / "ops_log.py"), "--append"])
     return 0

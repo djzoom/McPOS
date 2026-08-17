@@ -1,5 +1,10 @@
 # SiG 长片管线 — 冻结版 v2（2026-08-13）
 
+> **⚠ 2026-08-17 起本文档只是原子时代的存档。** 用户裁定原子拼接成片
+> 太碎太密,长片一律改走**分子管线**(段落级整块,见 `RESUME.md` 第〇/二节):
+> `harvest_molecules → molecule_quality → build_molecule_session → content_gate`。
+> 原子库与本清单仍服务 TOYTUNE 短片线;`build_session.py` 不再出新长片。
+
 冻结依据：`sg_gold_001`–`004` 四期全部通过 `release_gate.py` 七关（含 whisper
 音画反查，WER 0.0–0.3%、零漏句零多出）；8 期连排判定「稳定」（平均重叠 7.0%、
 最高 56.3%、门禁零拦下）。

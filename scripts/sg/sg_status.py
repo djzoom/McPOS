@@ -53,14 +53,15 @@ def main() -> int:
              and (d / f"{d.name}.zh-Hans.srt").exists()]
     print(f"║ 成品     {len(eps)} 期 · 六件齐备 {len(ready)} 期")
 
-    # 长片发布
+    # 长片发布(2026-08-17 起分子时代:未播旧片已撤回,等新管线合格再传)
     master = _j(ROOT / "config/sg_schedule_master.json", {"episodes": []})
     rows = master.get("episodes", [])
-    live = [r for r in rows if r.get("video_id")]
-    future = sorted(r["schedule_date"] for r in rows
-                    if r.get("schedule_date", "") >= today.isoformat())
-    print(f"║ 长片     已上线 {len(live)}/{len(rows)} · "
-          f"下一期 {future[0] if future else '—'} · 排至 {rows[-1]['schedule_date'] if rows else '—'}")
+    public = [r for r in rows if r.get("published_at_actual")]
+    held = [r for r in rows if r.get("hold")]
+    pending_recall = [r for r in rows if r.get("recall_needed")]
+    print(f"║ 长片     已公开 {len(public)} · 已撤回 {len(held)}"
+          + (f" · 待撤 {len(pending_recall)}" if pending_recall else "")
+          + " · 新片等分子管线")
 
     # 短片发布
     st = _j(TOYTUNE / "publish_state.json", {"uploaded": {}}).get("uploaded", {})
@@ -75,16 +76,14 @@ def main() -> int:
 
     # —— 下一步建议:按「会不会断档」排序,不是按事情大小 ——
     todo: list[str] = []
-    if len(live) < len(rows):
-        todo.append(f"传剩余 {len(rows)-len(live)} 期长片:sg_batch_upload.py")
+    if pending_recall:
+        todo.append(f"撤回续跑剩 {len(pending_recall)} 期(daily_ops 会自动续)")
+    if held:
+        todo.append("分子管线联调:build_molecule_session → content_gate "
+                    "稳定放行 → 重制期次 → 重新排播(见 RESUME.md)")
     if buffer < 3:
         todo.append(f"短片缓冲仅 {buffer} 天:daily_ops.py 会自动补")
-    last = rows[-1]["schedule_date"] if rows else today.isoformat()
-    days_left = (date.fromisoformat(last) - today).days
-    if days_left < 45:
-        todo.append(f"⚠ 长片库存仅剩 {days_left} 天(排至 {last})——"
-                    f"该启动补料了:见 ATOM_SUPPLY_PLAN.md 轨道 B")
-    todo.append("日常:daily_ops.py(评论/短片/字幕/长片/日志 五步)")
+    todo.append("日常:daily_ops.py(评论/撤回/短片/字幕/长片/日志 六步)")
 
     print("\n下一步:")
     for i, t in enumerate(todo, 1):
