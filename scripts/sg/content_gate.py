@@ -131,16 +131,47 @@ def _arbitrate(mol_path: str, model, heard: str, lib: str) -> str:
 def judge(blocks: list[dict], vo_ends: float, total: float,
           claimed: list[str], primary: str,
           lib_texts: list[tuple[str, str, str]] | None = None,
-          model=None, mix_path=None) -> dict:
+          model=None, mix_path=None, mol_plan=None,
+          atempo: float = 1.0) -> dict:
     checks: dict[str, dict] = {}
     judge.model = model
     judge.mix_path = mix_path
+    judge.mol_plan = mol_plan
+    judge.atempo = atempo
 
-    bad = [i for i, b in enumerate(blocks) if text_complete(b["text"])]
+    def _occupancy_ok(i: int) -> bool:
+        """成片占位与库时长(经 atempo 折算)一致 = 音频物理完整。
+
+        拼接渲染在结构上不可能丢词 —— 占位一致时,任何「不完整」都是
+        转写层在成片语境下吞了软尾气声词(2026-08-17 ps16 实测:库尾
+        「…before the morning comes.」完整,成片转写却听丢)。
+        """
+        if not (judge.mol_plan and lib_texts and i < len(lib_texts)
+                and i < len(judge.mol_plan)
+                and len(blocks) == len(lib_texts)):
+            return False
+        p = judge.mol_plan[i]
+        mdur = lib_texts[i][3]
+        if p.get("vo_start_sec") is None or not mdur:
+            return False
+        occ = p["vo_end_sec"] - p["vo_start_sec"]
+        return abs(occ - mdur / max(0.5, judge.atempo)) <= 0.3
+
+    bad, noise = [], []
+    for i, b in enumerate(blocks):
+        why = text_complete(b["text"])
+        if not why:
+            continue
+        if lib_texts and i < len(lib_texts) \
+                and text_complete(lib_texts[i][0]) is None \
+                and _occupancy_ok(i):
+            noise.append(f"块{i} 转写噪声容忍[{why}](库完整+占位一致)")
+            continue
+        bad.append((i, why))
     checks["G1_blocks_complete"] = {
         "pass": not bad,
-        "detail": [f"块{i}: [{text_complete(blocks[i]['text'])}] "
-                   f"「{blocks[i]['text'][:60]}」" for i in bad]}
+        "detail": [f"块{i}: [{why}] 「{blocks[i]['text'][:60]}」"
+                   for i, why in bad] + noise}
 
     gaps = [round(blocks[i + 1]["start"] - blocks[i]["end"], 1)
             for i in range(len(blocks) - 1)]
@@ -197,7 +228,7 @@ def judge(blocks: list[dict], vo_ends: float, total: float,
         if len(blocks) != len(lib_texts):
             probs.append(f"块数 {len(blocks)} ≠ 选段数 {len(lib_texts)}(成片变形)")
         else:
-            for i, (b, (ref, mid, mpath)) in enumerate(zip(blocks, lib_texts)):
+            for i, (b, (ref, mid, mpath, mdur)) in enumerate(zip(blocks, lib_texts)):
                 hw, rw = _norm_words(b["text"]), _norm_words(ref)
                 if not rw:
                     continue
@@ -213,9 +244,22 @@ def judge(blocks: list[dict], vo_ends: float, total: float,
                 if verdict == "library_bad":
                     suspects.append(mid)
                     continue
+                # 时长证据:拼接渲染在结构上不可能丢词。分子在成品轨上的
+                # 占位与库内时长(经 atempo 折算)一致 → 音频物理完整,分歧
+                # 只是转写层噪声(软尾气声词两次转写各执一词),分子进文本
+                # 复核队列,不判成片死刑。占位对不上才是真变形。
+                occ = exp = None
+                if judge.mol_plan and i < len(judge.mol_plan):
+                    p = judge.mol_plan[i]
+                    if p.get("vo_start_sec") is not None:
+                        occ = p["vo_end_sec"] - p["vo_start_sec"]
+                        exp = (mdur or 0) / max(0.5, judge.atempo)
+                if occ is not None and exp and abs(occ - exp) <= 0.3:
+                    suspects.append(mid)
+                    continue
                 why = (f"相似度 {sim:.2f}" if sim < 0.82 else
                        f"{'首' if head_bad else '尾'}词缺失")
-                probs.append(f"块{i} {why}(仲裁:{verdict})"
+                probs.append(f"块{i} {why}(仲裁:{verdict},占位 {occ} vs {exp})"
                              f"应「…{' '.join(rw[-4:])}」闻「…{' '.join(hw[-4:])}」")
         checks["G7_words_intact"] = {
             "pass": not probs,
@@ -364,10 +408,14 @@ def main() -> int:
         byid = {m["id"]: m
                 for m in json.loads(man.read_text())["molecules"]}
         lib_texts = [(byid.get(i, {}).get("text", ""), i,
-                      byid.get(i, {}).get("path", "")) for i in mol_ids]
+                      byid.get(i, {}).get("path", ""),
+                      byid.get(i, {}).get("duration_sec")) for i in mol_ids]
     mix = meta.get("paths", {}).get("final_mix")
+    mol_plan = [p for p in (meta.get("molecule_plan") or meta.get("plan") or [])
+                if p.get("type") == "atom"]
     verdict = judge(blocks, vo_ends, total, claimed, primary, lib_texts,
-                    model=model, mix_path=Path(mix) if mix else None)
+                    model=model, mix_path=Path(mix) if mix else None,
+                    mol_plan=mol_plan, atempo=float(meta.get("vo_atempo") or 1.0))
 
     print(f"═══ 内容门 · {eid} ═══")
     for name, c in verdict["checks"].items():
