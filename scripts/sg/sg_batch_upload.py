@@ -114,6 +114,9 @@ def cmd(a: argparse.Namespace) -> int:
         flag = video.parent / f"{ep_id}_upload_complete.flag"
 
         # 幂等门
+        if ep.get("hold"):
+            print(f"  🧊 #{num} {ep_id} 已冻结(recalled)— 旧文件不重传")
+            continue
         if flag.exists() or ep.get("video_id") or ep.get("status") in ("uploaded", "verified"):
             print(f"  ⏭  #{num} {ep_id} 已上传({ep.get('video_id')})— 跳过")
             done += 1

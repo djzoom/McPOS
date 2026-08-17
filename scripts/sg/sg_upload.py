@@ -215,6 +215,72 @@ def cmd_reschedule(a) -> None:
         print("主表已回填")
 
 
+def cmd_recall(a) -> None:
+    """撤回未播出的长片:平台删除 + 主表标 hold,已公开的绝不动。
+
+    2026-08-17 用户令:原子拼接的成片表达太碎太密,未播出的一律撤回,
+    等分子管线出了真正合格的内容再重新上传。删除不可逆,三重保险:
+    ① 只挑 published_at_actual 为空的行;② 平台端现场核实
+    privacyStatus=='private'(1u,便宜);③ 核实不过就跳过并大声报告。
+
+    幂等:先给全部目标行落 recall_needed 标记(意图先落盘),再删配额
+    允许的部分;删成一条清一条标记。配额中断后重跑即续,daily_ops
+    也会在有标记时自动续跑 —— 未删干净的期次仍挂着定时公开,拖着不删
+    它会自己播出去。
+    """
+    import quota
+    master_path = ROOT / "config" / "sg_schedule_master.json"
+    master = json.loads(master_path.read_text(encoding="utf-8"))
+    targets = [r for r in master.get("episodes", [])
+               if r.get("video_id") and not r.get("published_at_actual")]
+    for r in targets:                       # 意图先落盘,配额中断也不丢
+        r["recall_needed"] = True
+    master_path.write_text(json.dumps(master, ensure_ascii=False, indent=1),
+                           encoding="utf-8")
+    if not targets:
+        print("没有待撤回的期次")
+        return
+    print(f"待撤回 {len(targets)} 期(按公开日先近后远):")
+    targets.sort(key=lambda r: r.get("publish_at", ""))
+    if a.dry_run:
+        for r in targets:
+            print(f"  DRY #{r['episode_number']} {r['video_id']} "
+                  f"(原定 {r.get('schedule_date')})")
+        return
+    yt = build_service()
+    done = 0
+    with upload_link_lock("sg-recall"):
+        for r in targets:
+            if not quota.can_afford(51):     # list 1u + delete 50u
+                print(f"  ⛔ 配额不足,余 {quota.remaining()}u —— "
+                      f"剩 {len(targets)-done} 期留给下次(daily_ops 会自动续)")
+                break
+            vid = r["video_id"]
+            resp = yt.videos().list(part="status", id=vid).execute()
+            quota.record("videos.list", f"recall-check #{r['episode_number']}")
+            items = resp.get("items", [])
+            if items and items[0]["status"]["privacyStatus"] != "private":
+                print(f"  🛑 #{r['episode_number']} {vid} 状态是 "
+                      f"{items[0]['status']['privacyStatus']},不是 private —— 跳过不删")
+                continue
+            if items:
+                yt.videos().delete(id=vid).execute()
+                quota.record("videos.delete", f"recall #{r['episode_number']}")
+            else:
+                print(f"  (#{r['episode_number']} 平台已不存在,只清主表)")
+            r["recalled_video_id"] = vid
+            r.pop("video_id", None)
+            r.pop("recall_needed", None)
+            r["status"] = "recalled"
+            r["hold"] = True                 # 上传器护栏:此行冻结,旧文件绝不重传
+            r["caption_uploaded"] = False
+            done += 1
+            print(f"  ✅ #{r['episode_number']} {vid} 已删除并冻结")
+    master_path.write_text(json.dumps(master, ensure_ascii=False, indent=1),
+                           encoding="utf-8")
+    print(f"本次撤回 {done}/{len(targets)} 期,主表已回填")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="SG YouTube OAuth/上传核心")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -224,9 +290,11 @@ def main() -> int:
     sub.add_parser("status", help="凭证状态")
     pr = sub.add_parser("reschedule", help="平台端改期(主表 reschedule_needed 标记)")
     pr.add_argument("--dry-run", action="store_true")
+    pc = sub.add_parser("recall", help="撤回未播出的长片(平台删除+主表冻结)")
+    pc.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
     {"auth": cmd_auth, "status": cmd_status,
-     "reschedule": cmd_reschedule}[a.cmd](a)
+     "reschedule": cmd_reschedule, "recall": cmd_recall}[a.cmd](a)
     return 0
 
 

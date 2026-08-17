@@ -4,6 +4,22 @@
 # Environment variables can override values using the `KATREC_` prefix, e.g.
 # `KATREC_LIBRARY_SONG_LIBRARY_ROOT=/Volumes/Media/Library`.
 
+api:
+  # TEXT_BASE LLM: ollama | openai | openai_compatible
+  provider: ollama
+  keys:
+    openai: ${OPENAI_API_KEY}
+  ollama:
+    host: http://127.0.0.1:11434
+    model: qwen2.5:3b
+    api_key: ollama
+  openai:
+    model: gpt-4o-mini
+  openai_compatible:
+    base_url: http://127.0.0.1:1234/v1
+    model: local-model
+    api_key: local
+
 library:
   # Absolute path to the local song library on disk.
   song_library_root: "/Users/example/Music/KatRecordsLibrary"
