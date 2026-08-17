@@ -1160,12 +1160,18 @@ def duck_mix(
     bed_volume_db: float = -16.0,
     ducking_db: float = -18.0,
     vo_gain_db: float = 3.0,
+    duck_ratio: float = 12.0,
+    duck_release_ms: int = 700,
 ) -> Path:
     """Mix music bed under VO with a quiet base bed + deeper duck while speech is present.
 
     bed_volume_db: constant music level (negative = quieter bed overall).
     ducking_db: how hard to pull bed under active speech (more negative = deeper duck).
     vo_gain_db: slight speech lift so VO stays intelligible over a soft bed.
+    duck_ratio / duck_release_ms: 压缩比与释放。默认值 12:1 / 700ms 是
+    原子时代冻结参数(已发布期次的声音,不动);2026-08-17 人耳审听发现
+    这组参数在句间 4s 停顿下音乐每句涨落 13-16 dB(「抽吸」),分子
+    管线改传 4:1 / 2200ms —— 压得浅、放得慢,音乐保持连续空间感。
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     bed = float(bed_volume_db)
@@ -1181,7 +1187,8 @@ def duck_mix(
         f"[0:a]aformat=sample_fmts=fltp:channel_layouts=stereo,volume={bed:.1f}dB[m0];"
         f"[1:a]aformat=sample_fmts=fltp:channel_layouts=stereo,volume={vo_g:.1f}dB,asplit=2[voc][sc];"
         f"[m0][sc]sidechaincompress="
-        f"threshold=0.012:ratio=12:attack=30:release=700:makeup=1:knee=2.5"
+        f"threshold=0.012:ratio={duck_ratio:g}:attack=30"
+        f":release={int(duck_release_ms)}:makeup=1:knee=2.5"
         f"[ducked];"
         f"[ducked]volume={-extra_duck:.1f}dB[m];"
         f"[m][voc]amix=inputs=2:duration=longest:dropout_transition=2:normalize=0,"

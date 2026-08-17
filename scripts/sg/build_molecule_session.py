@@ -48,8 +48,14 @@ DEFAULT_OUT = Path.home() / "Studio/Workspace/outputs/sg/sessions"
 
 # 节制预算:minutes → (分子音频目标秒数, 块数下限, 块数上限)
 BUDGET = {30: (7 * 60, 8, 12), 60: (10 * 60, 10, 14)}
-GAP_BASE = (16.0, 36.0)    # 块间距基础区间;随进度 ×(1+0.6·p),封顶 55s
-GAP_CAP = 55.0
+# 2026-08-17 人耳审听定的节奏参数(此前 16-36×1.6 封顶 55,审听结论:
+# 「句子快、留白长」不成引导感;40→22 的涨落也不平滑):
+GAP_BASE = (18.0, 30.0)    # 块间距基础区间,随进度 ×(1+0.5·p)
+GAP_CAP = 42.0
+GAP_FINAL_CAP = 30.0       # 结尾块之前的停顿封顶:近 50s 静默后人声
+                           # 突然回来会把已入睡的听众唤醒
+VO_ATEMPO = 0.86           # 句内语速实测 141 wpm(热段 165),睡前引导
+                           # 应在 115-125 —— 0.86 → 均值 ~121 wpm
 COOL_EPISODES = 12         # 分子冷却窗:近 N 期用过的段落,本期回避
 
 
@@ -233,7 +239,9 @@ def main() -> int:
         last = i == len(picked) - 1
         prog = i / max(1, len(picked) - 1)
         gap = 0.0 if last else min(
-            GAP_CAP, random.uniform(*GAP_BASE) * (1 + 0.6 * prog))
+            GAP_CAP, random.uniform(*GAP_BASE) * (1 + 0.5 * prog))
+        if i == len(picked) - 2:
+            gap = min(gap, GAP_FINAL_CAP)
         timeline.append(("atom", Path(m["path"]), round(gap, 1)))
         plan.append({
             "slot": f"MOL_{i:02d}", "type": "atom", "id": m["id"],
@@ -251,7 +259,7 @@ def main() -> int:
 
     vo_path = out_dir / f"{eid}_vo.mp3"
     vo_marks: list[dict] = []
-    build_vo_track(timeline, vo_path, atempo=1.0, marks_out=vo_marks)
+    build_vo_track(timeline, vo_path, atempo=VO_ATEMPO, marks_out=vo_marks)
     vo_dur = probe_duration(vo_path)
     for p, mk in zip(plan, vo_marks):
         p["vo_start_sec"], p["vo_end_sec"] = mk["start_sec"], mk["end_sec"]
@@ -276,8 +284,11 @@ def main() -> int:
     else:
         vo_for_mix = vo_path
     final_path = out_dir / f"{eid}_final_mix.mp3"
+    # 混音柔化(2026-08-17 审听):浅压慢放,音乐不抽吸。ducking 与 bed
+    # 同值 → 附加压降为零,总鸭深只来自 4:1 压缩 ≈ 8-10 dB。
     duck_mix(music_path, vo_for_mix, final_path,
-             bed_volume_db=-16.0, ducking_db=-18.0, vo_gain_db=3.0)
+             bed_volume_db=-16.0, ducking_db=-16.0, vo_gain_db=3.0,
+             duck_ratio=4.0, duck_release_ms=2200)
 
     # 响度归一:静态增益对齐 Ep1 基线(动态 loudnorm 会呼吸泵动,睡眠向
     # 内容不可接受);增益后真峰越限就按峰让步,宁静勿爆。
@@ -309,7 +320,7 @@ def main() -> int:
         "voice": "Locke",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "seed": a.seed,
-        "vo_atempo": 1.0,
+        "vo_atempo": VO_ATEMPO,
         "music_bed": {"bed_volume_db": -16.0, "ducking_db": -18.0,
                       "vo_gain_db": 3.0, "crossfade_sec": 8.0,
                       "tracks": bed_tracks},

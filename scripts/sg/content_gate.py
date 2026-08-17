@@ -285,6 +285,26 @@ def canon_text(t: str) -> str:
     return t
 
 
+def _merge_utts(utts: list[tuple[float, float, str]]
+                ) -> list[tuple[float, float, str]]:
+    """块内近邻转写条目并成整句字幕 —— 2026-08-17 人耳审听:
+    「For you alone, Lord. / make me dwell in safety.」被拆成两条,
+    标点也断错。并句只动标点与换行,一个词都不改(字幕迁就音频红线)。
+    """
+    out: list[tuple[float, float, str]] = []
+    for t0, t1, tx in utts:
+        if out:
+            p0, p1, ptx = out[-1]
+            joined = f"{ptx} {tx}"
+            if t0 - p1 <= 1.5 and len(joined.split()) <= 16:
+                if ptx.rstrip().endswith(".") and tx[:1].islower():
+                    joined = f"{ptx.rstrip().rstrip('.')}, {tx}"
+                out[-1] = (p0, t1, joined)
+                continue
+        out.append((t0, t1, tx))
+    return out
+
+
 def utterance_plan(blocks: list[dict]) -> list[dict]:
     """转写条目 → 渲染器/字幕用的 plan(真实成品时间戳)。
 
@@ -295,7 +315,7 @@ def utterance_plan(blocks: list[dict]) -> list[dict]:
     seq = 0
     for bi, b in enumerate(blocks):
         prev_end = None
-        for t0, t1, tx in b["utts"]:
+        for t0, t1, tx in _merge_utts(b["utts"]):
             seq += 1 if (prev_end is not None and t0 - prev_end <= 2.5) else 10
             plan.append({
                 "slot": f"BLOCK_{bi:02d}", "type": "atom",
