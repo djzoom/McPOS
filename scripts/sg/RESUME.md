@@ -44,10 +44,15 @@ content_gate.py             独立内容门:只转写成片音频判六项;放�
 实测书卷声明);渲染器兼容确认(40s rings 样片)。判据修正的完整
 过程见 molecule_quality.py 各常量旁的注释。
 
-**待办(按序)**:① 与 release_gate 对接(R3 换内容门,R4 已被门覆盖)
-② 每期中文字幕(译表按门产出的 en SRT 逐句翻译 → build_zh_srt 十门禁)
-③ 定 30/60min 配比与封面,重制最大期数(9 主题 ≈ 9 期不重样)
-④ 重新排播上传(sg_batch_upload 认新期次;hold 行是旧片,保持冻结)
+**里程碑(2026-08-19)**:用户判定管线合格;九期 sg_mol_v3_* 在
+**十一门**(G1-G11,含响度与礼仪)下全绿,已登记出片史册。
+5 期三语字幕齐备(deut31/john10/phil4/ps121a/ps121b)。
+
+**生产收尾(按序,见任务 #24)**:① 九期视频渲染(rings/pendulum 交替,
+`render_rings_long --session X --seconds 0`)② isa26/john14/ps16/ps4a
+译表+build_zh_srt ③ 主表排播:新内容顶替 hold 行 Ep2-8 + 新增 9/10,
+每周六 19:00 ET 自 08-22 ④ 标题入 upload_meta ⑤ 封面 ⑥ daily_ops
+按配额分日上传。神学层规范见 THEOLOGY_REVIEW.md。
 
 ## 三、旧原子管线(冻结,只服务短片线)
 
