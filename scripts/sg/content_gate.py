@@ -298,6 +298,26 @@ def judge(blocks: list[dict], vo_ends: float, total: float,
         "pass": not jumps,
         "detail": jumps or f"相邻间距比全部 ≤2.6({len(gaps2)} 个间距)"}
 
+    # G11 礼仪完整(2026-08-18 神职标准审读):
+    #  ① 末块必须有正式收尾式(Amen / in the name of Jesus / 三一颂)——
+    #     john10 实测整期祷告没有收尾,神职听众必然察觉
+    #  ② 三一颂读了「奉父的名」就必须补全子与圣灵 —— 残缺的三一颂
+    #     比没有更糟
+    #  ③ 字幕层(canon 后)不得残留数字胡话引用(「Psalm 1, 2, 1…」)
+    fixed_all = canon_text(all_text).lower()
+    fixed_last = canon_text(blocks[-1]["text"]).lower() if blocks else ""
+    formula = re.compile(
+        r"\bamen\b|in the name of jesus|in jesus'? name|name of the father")
+    trin_ok = True
+    if "in the name of the father" in fixed_all:
+        trin_ok = ("son" in fixed_all and "holy spirit" in fixed_all)
+    babble = re.findall(rf"\b({BOOKS})\s+\d,\s*\d", canon_text(all_text))
+    checks["G11_liturgy"] = {
+        "pass": bool(formula.search(fixed_last)) and trin_ok and not babble,
+        "detail": f"收尾式 {'有' if formula.search(fixed_last) else '❌无'} · "
+                  f"三一颂完整 {trin_ok} · 引用胡话 {babble or '无'} · "
+                  f"末块「…{canon_text(blocks[-1]['text'])[-46:] if blocks else ''}」"}
+
     # G10 响度:基线 = 已公开 Ep1 实测 -28.0 LUFS / TP -6.6(2026-08-17)。
     # 深夜连听,期与期必须一致;门自己重测成片,不信出片器自报的数。
     if judge.mix_path is not None:
@@ -316,16 +336,43 @@ def judge(blocks: list[dict], vo_ends: float, total: float,
             "judged_at": datetime.now(timezone.utc).isoformat()}
 
 
-# 品牌名与常见转写听差的规范表 —— 只修**显示文本**(字幕/视频文字),
-# 判定(G1–G6)一律用原始转写;音频本身没错,是 whisper 听差。
+# 规范表 —— 只修**显示文本**(字幕/视频文字),判定用原始转写。
+# 2026-08-18 神职标准审读:逐条与分子库文本(独立转写)核验,确认音频
+# 全对、是成片语境转写听差之后才入表 —— 每条都有库内证据。
+# 最恶劣的一条:三一颂「and of the Son」被听成「End of the Sun」,
+# 字幕若带着太阳崇拜既视感上片,神学上是事故。
 CANON = [
     (re.compile(r"\bSleep\s+and\s+Grace\b", re.IGNORECASE), "Sleep in Grace"),
+    (re.compile(r"\bSleeping\s+Grace\b"), "Sleep in Grace"),
+    (re.compile(r"\bEnd of the [Ss]un\b"), "and of the Son"),
+    (re.compile(r"\bI have said the Lord\b"), "I have set the Lord"),
+    (re.compile(r"\bReplace them in your hands\b"), "We place them in your hands"),
+    (re.compile(r"\bA present stronger\b"), "A presence stronger"),
+    (re.compile(r"\bNot enjoy\b"), "Not in joy"),
+    (re.compile(r"\ba gentle whisperer\b"), "a gentle whisper"),
+    (re.compile(r"\bHis eyes remained open\b"), "His eyes remain open"),
 ]
+
+# 经文引用的读法转写五花八门(「Psalm 1, 2, 1, 1 and 2」「John 14, 27」
+# 「Philippians 4-7」),字幕必须还原为标准章节格式 —— 神职读者对引用
+# 格式的容忍度为零。先特例后通例,通例只在书卷名后生效。
+REF_SPECIAL = [
+    (re.compile(r"\bPsalm 1, 2, 1, 1,? and 2\b"), "Psalm 121:1-2"),
+    (re.compile(r"\bPhilippians 4-7\b"), "Philippians 4:7"),
+    (re.compile(r"\bPsalm 23, 2 and 3\b"), "Psalm 23:2-3"),
+    (re.compile(r"\bDeuteronomy 33, 27\b"), "Deuteronomy 33:27"),
+]
+REF_GENERIC = re.compile(rf"\b({BOOKS})\s+(\d{{1,3}})\s*[.,]?\s+?(\d{{1,3}})\b")
+REF_DOT = re.compile(rf"\b({BOOKS})\s+(\d{{1,3}})\s*[.,]\s*(\d{{1,3}})\b")
 
 
 def canon_text(t: str) -> str:
     for pat, rep in CANON:
         t = pat.sub(rep, t)
+    for pat, rep in REF_SPECIAL:
+        t = pat.sub(rep, t)
+    t = REF_DOT.sub(lambda m: f"{m.group(1)} {m.group(2)}:{m.group(3)}", t)
+    t = REF_GENERIC.sub(lambda m: f"{m.group(1)} {m.group(2)}:{m.group(3)}", t)
     return t
 
 

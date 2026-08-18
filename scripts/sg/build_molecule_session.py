@@ -190,7 +190,29 @@ def select_molecules(pool: list[dict], budget_sec: float,
             have.discard(m["span_index"])
             print(f"  [指代护栏] 弃选指代悬空段 span={m['span_index']}")
     picked.sort(key=lambda m: m["span_index"])
-    return [opener] + picked + closers
+    chosen = [opener] + picked + closers
+
+    # 收尾保底(2026-08-18 神职标准):末块必须有正式收尾式。john10 母带
+    # 实测整期祷告无收尾 —— 从**任意主题**借一条无经文引用的通用收尾
+    # (「…in the name of the Father, and of the Son…Amen.」),同一把
+    # 声音同一语域,不伤「一期一经文」。已有收尾式则绝不追加 ——
+    # 双重收尾比缺收尾更笨拙。
+    formula = re.compile(r"\bamen\b|in the name of jesus|in jesus'? name|"
+                         r"name of the father", re.IGNORECASE)
+    if not formula.search(chosen[-1]["text"]):
+        allm = json.loads(MANIFEST.read_text(encoding="utf-8"))["molecules"]
+        univ = [m for m in allm
+                if m["role"] in ("close", "bless")
+                and not m.get("books_heard")
+                and "amen" in m["text"].lower()
+                and m["duration_sec"] <= 16
+                and reject_reason(m) is None]
+        univ.sort(key=lambda m: (recent.get(m["id"], 0.0), m["duration_sec"]))
+        if univ:
+            chosen.append(univ[0])
+            print(f"  [收尾保底] 借用通用收尾 {univ[0]['id']}"
+                  f"「…{univ[0]['text'][-40:]}」")
+    return chosen
 
 
 def main() -> int:

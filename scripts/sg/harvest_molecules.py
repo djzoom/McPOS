@@ -34,8 +34,8 @@ WORK = Path.home() / "Studio/Workspace/temp/sg_molecule_work"
 # 主题母带表:文件名关键片段 → (slug, 主经文, 全部经文)
 # 每支母带就是一场围绕一处经文的完整祷告 —— 这正是「每期一处经文」的天然单位。
 THEMED = [
-    ("0906Fall_Asleep_Knowing",      "deut31",   "Deuteronomy 31:8",
-     ["Deuteronomy 31:8"]),
+    ("0906Fall_Asleep_Knowing",      "deut31",   "Deuteronomy 31:6",
+     ["Deuteronomy 31:6"]),   # 母带实读 31:6(曾按文件名猜 31:8)
     ("0908_Peace_That_Surpasses",    "john14",   "John 14:27",
      ["John 14:27", "Philippians 4:7"]),
     ("God_Is_Still_Speaking",        "ps121a",   "Psalm 121",
@@ -48,9 +48,9 @@ THEMED = [
      ["Isaiah 26:3", "Philippians 4:7", "Psalm 4:8"]),
     ("John10_Psalm62",               "john10",   "John 10:28",
      ["John 10:28", "Psalm 62:1-2"]),
-    ("Psalm121_Lamentations3",       "ps121b",   "Psalm 121:3-4",
+    ("Psalm121_Lamentations3",       "ps121b",   "Psalm 121:4",
      ["Psalm 121:3-4", "Lamentations 3:22-23"]),
-    ("Psalm16_Matthew28",            "ps16",     "Psalm 16:8-9",
+    ("Psalm16_Matthew28",            "ps16",     "Psalm 16:8",
      ["Psalm 16:8-9", "Matthew 28:20"]),
 ]
 
