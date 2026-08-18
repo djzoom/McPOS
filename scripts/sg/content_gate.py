@@ -33,7 +33,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_session import build_srt                      # noqa: E402
 from harvest_whisper import resolve_model, span_phrases, to_wav16k  # noqa: E402
-from molecule_quality import perspective, text_complete   # noqa: E402
+from molecule_quality import (                            # noqa: E402
+    CLOSING_FORMULA_RE, perspective, text_complete)
 from sg_media import probe_duration                       # noqa: E402
 
 WORK = Path.home() / "Studio/Workspace/temp/sg_content_gate"
@@ -132,12 +133,13 @@ def judge(blocks: list[dict], vo_ends: float, total: float,
           claimed: list[str], primary: str,
           lib_texts: list[tuple[str, str, str]] | None = None,
           model=None, mix_path=None, mol_plan=None,
-          atempo: float = 1.0) -> dict:
+          atempo: float = 1.0, mol_spans=None) -> dict:
     checks: dict[str, dict] = {}
     judge.model = model
     judge.mix_path = mix_path
     judge.mol_plan = mol_plan
     judge.atempo = atempo
+    judge.mol_spans = mol_spans
 
     def _occupancy_ok(i: int) -> bool:
         """成片占位与库时长(经 atempo 折算)一致 = 音频物理完整。
@@ -283,9 +285,18 @@ def judge(blocks: list[dict], vo_ends: float, total: float,
     flips = sum(1 for i in range(1, len(traj)) if traj[i] != traj[i - 1])
     aba = any(traj[i] != traj[i + 1] and traj[i] == traj[i + 2]
               for i in range(len(traj) - 2))
+    # 母带原序豁免(2026-08-18 isa26 实测):小主题选段几乎全取、span
+    # 零跳选时,听到的交错就是原作者自己的编排(安抚→祷告→经文提醒
+    # →祷告),本来就连贯。G8 是为「跳选打乱弧线」设计的 —— 选段在
+    # 母带上连续时,弧线由作者负责,不受本分类器审判。
+    spans = judge.mol_spans or []
+    body_spans = sorted(spans[1:-1]) if len(spans) > 2 else []
+    contiguous = bool(body_spans) and         body_spans == list(range(body_spans[0], body_spans[-1] + 1))
     checks["G8_perspective"] = {
-        "pass": flips <= 3 and not aba,
-        "detail": f"轨迹 {''.join(traj)} · 切换 {flips} 次(≤3) · 横跳 {'有' if aba else '无'}"}
+        "pass": contiguous or (flips <= 3 and not aba),
+        "detail": f"轨迹 {''.join(traj)} · 切换 {flips} 次(≤3) · "
+                  f"横跳 {'有' if aba else '无'}"
+                  + (" · 母带原序完整,弧线豁免" if contiguous else "")}
 
     # G9 停顿均匀:间距允许随进度渐长(入睡曲线),不允许突变 ——
     # 相邻间距之比 ≤2.6(设计随机域的最坏值 ~2.25 留余量)。
@@ -306,8 +317,7 @@ def judge(blocks: list[dict], vo_ends: float, total: float,
     #  ③ 字幕层(canon 后)不得残留数字胡话引用(「Psalm 1, 2, 1…」)
     fixed_all = canon_text(all_text).lower()
     fixed_last = canon_text(blocks[-1]["text"]).lower() if blocks else ""
-    formula = re.compile(
-        r"\bamen\b|in the name of jesus|in jesus'? name|name of the father")
+    formula = CLOSING_FORMULA_RE
     trin_ok = True
     if "in the name of the father" in fixed_all:
         trin_ok = ("son" in fixed_all and "holy spirit" in fixed_all)
@@ -457,12 +467,14 @@ def main() -> int:
         lib_texts = [(byid.get(i, {}).get("text", ""), i,
                       byid.get(i, {}).get("path", ""),
                       byid.get(i, {}).get("duration_sec")) for i in mol_ids]
+        mol_spans = [byid.get(i, {}).get("span_index") for i in mol_ids]
     mix = meta.get("paths", {}).get("final_mix")
     mol_plan = [p for p in (meta.get("molecule_plan") or meta.get("plan") or [])
                 if p.get("type") == "atom"]
     verdict = judge(blocks, vo_ends, total, claimed, primary, lib_texts,
                     model=model, mix_path=Path(mix) if mix else None,
-                    mol_plan=mol_plan, atempo=float(meta.get("vo_atempo") or 1.0))
+                    mol_plan=mol_plan, atempo=float(meta.get("vo_atempo") or 1.0),
+                    mol_spans=mol_spans if mol_ids else None)
 
     print(f"═══ 内容门 · {eid} ═══")
     for name, c in verdict["checks"].items():
@@ -475,7 +487,11 @@ def main() -> int:
     meta["content_gate"] = verdict
     if verdict["pass"] and not a.report_only:
         plan = utterance_plan(blocks)
-        meta["molecule_plan"] = meta.get("plan")
+        # 幂等护栏:重判一个已放行的期次时,meta["plan"] 已经是话语级 ——
+        # 无条件回存会把分子级 molecule_plan 覆盖掉,占位证据从此失效
+        # (2026-08-18 john14/ps16 实测:占位 5.7s vs 应 33.9s 的荒谬对比)。
+        if "molecule_plan" not in meta:
+            meta["molecule_plan"] = meta.get("plan")
         meta["plan"] = plan
         srt = sdir / f"{eid}.srt"
         srt.write_text(build_srt(plan), encoding="utf-8")
