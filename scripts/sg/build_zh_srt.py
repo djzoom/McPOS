@@ -31,7 +31,11 @@ SESSIONS = Path.home() / "Studio/Workspace/outputs/sg/sessions"
 
 # 门禁 7：Amen 的译法必须稳定。上一轮的错译正是把别的句子译成了「阿们」，
 # 所以两个方向都要查：Amen 必须译成阿们，且阿们只能来自 Amen。
+# ⚠ 简繁两形都要认（阿们/阿們）——2026-08-18 繁体稿在此门禁报假失败：
+# s2twp 把「们」正常转成「們」，门禁只认简体形。检查器要能在两种
+# 字形上都成立（与否定词门禁同一个教训，同一个病根）。
 AMEN_ZH = "阿们"
+AMEN_ZH_FORMS = ("阿们", "阿們")
 
 # 门禁 6：否定词。中文的否定表达比英文分散，所以不做一对一映射，只比"有无"。
 EN_NEG = re.compile(r"\b(not|never|no|don'?t|doesn'?t|didn'?t|cannot|can'?t|won'?t|"
@@ -104,9 +108,10 @@ def gate(cues, table, brand_whitelist) -> tuple[list[str], list[str]]:
             soft.append(f"门禁6 cue{cid} 中文有否定、英文无（可能是意译，需人眼）: "
                         f"EN「{en[:40]}」ZH「{zh[:28]}」")
         # 门禁 7：Amen 双向
-        if re.search(r"\bamen\b", en, re.I) and AMEN_ZH not in zh:
+        has_amen_zh = any(f in zh for f in AMEN_ZH_FORMS)
+        if re.search(r"\bamen\b", en, re.I) and not has_amen_zh:
             hard.append(f"门禁7 cue{cid} Amen 未译作{AMEN_ZH}")
-        if AMEN_ZH in zh and not re.search(r"\bamen\b", en, re.I):
+        if has_amen_zh and not re.search(r"\bamen\b", en, re.I):
             hard.append(f"门禁7 cue{cid} 凭空出现{AMEN_ZH}（上一轮的典型错译）")
         # 门禁 4：人称——机器只能提示，判不了
         if re.search(r"\b(I|my|me|mine)\b", en) and not re.search(r"我", zh):

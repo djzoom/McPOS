@@ -53,12 +53,31 @@ def perspective(text: str) -> str:
     比数会误判成对听者说;而纯安抚段**永远不会**出现 we/us/our。
     (2026-08-17 john10 末块实测:we=2 you=5,按比数误判 Y,按有无正判 W。)
     """
+    低注 = """再修(2026-08-18):引文代词会污染判别 —— Lam 3:22 引文里的
+    「we are not consumed」把一个通篇对听者说话的安抚块翻成了 W。
+    单个 we 不再定性:W 需要 we≥2,或 we≥1 且有呼格(「Lord,」等
+    直接称呼上帝 —— 呼格是祷告的确定标志,安抚段不会出现)。"""
     low = f" {(text or '').lower()} "
     w = sum(low.count(f" {x} ") for x in ("we", "us", "our", "ours"))
     y = sum(low.count(f" {x} ") for x in ("you", "your", "yours", "you're"))
-    if w > 0:
+    # 呼格接受逗号或句号:whisper 常把「Lord,」听成「Lord.」(2026-08-18
+    # ps4a 实测,单个标点翻转整块分类)。「Lord's」有撇号不会误中。
+    vocative = re.search(r"\b(Lord|Father|Jesus|Holy Spirit)\s*[,.]",
+                         text or "")
+    if w >= 2 or (w >= 1 and vocative):
         return "W"
-    return "Y" if y > 0 else "N"
+    if y > 0:
+        return "Y"
+    return "W" if w else "N"
+
+
+# 正式收尾式 —— 出片器(收尾保底)与内容门(G11)共用这一份。
+# 「in the name of jesus」死正则容不下「in the powerful and tender
+# name of Jesus Christ」(ps121 实测被误判无收尾) —— 判据两处定义
+# 迟早漂移,教训重犯一次就收归一次。
+CLOSING_FORMULA_RE = re.compile(
+    r"\bamen\b|name of jesus|in jesus'? name|name of the father",
+    re.IGNORECASE)
 
 
 def internal_repeat(text: str) -> bool:
