@@ -361,6 +361,10 @@ CANON = [
     (re.compile(r"\bNot enjoy\b"), "Not in joy"),
     (re.compile(r"\ba gentle whisperer\b"), "a gentle whisper"),
     (re.compile(r"\bHis eyes remained open\b"), "His eyes remain open"),
+    # 段界伪影:句尾悬空的「the」是下一条字幕开头「The」的跨界重复
+    # (ps16「will not leave the / The Lord Who Holds…」实测),去重。
+    (re.compile(r"\bwill not leave the$"), "will not leave"),
+    (re.compile(r"\bThe Lord Who Holds Galaxies\b"), "The Lord who holds galaxies"),
 ]
 
 # 经文引用的读法转写五花八门(「Psalm 1, 2, 1, 1 and 2」「John 14, 27」

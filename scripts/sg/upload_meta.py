@@ -31,15 +31,19 @@ CATEGORY_MUSIC = "10"
 
 # ---------------------------------------------------------------- 真源:逐期定稿标题
 # YouTube 硬限 100 字符;SEO 前置关键词;不用句号(照 Kat/RBR 家规)。
+# 2026-08-19 分子 v3 重制:Ep2-8 原子期已撤回删除,标题整表换新;
+# 主经文一律取音频实读(THEOLOGY_REVIEW 事故级第 4 条)。
 EPISODE_TITLES = {
     1: "Safety is His to give — Psalm 4:8 | 18 Minutes Christian Night Prayer for Sleep · No. 001",
-    2: "Someone is awake, so you — Psalm 121:4 | 18 Minutes Christian Night Prayer for Sleep · No. 002",
-    3: "Lay it down; the day is complete | 21 Minutes Christian Night Prayer for Sleep · No. 003",
-    4: "Rest is offered. You have — Matthew 11:28 | 18 Minutes Christian Night Prayer for Sleep · No. 004",
-    5: "Sleep is a gift, not a wage — Psalm 127:2 | 30 Minutes Christian Night Prayer for Sleep · No. 005",
-    6: "The night has a limit. — Psalm 30:5 | 30 Minutes Christian Night Prayer for Sleep · No. 006",
-    7: "Fear can be handed over — Psalm 34:4 | 30 Minutes Christian Night Prayer for Sleep · No. 007",
-    8: "Rest is not earned, it is given | 30 Minutes Christian Night Prayer for Sleep · No. 008",
+    2: "He will never leave you — Deuteronomy 31:6 | 30 Minutes Christian Night Prayer for Sleep · No. 002",
+    3: "Peace the world cannot give — John 14:27 | 30 Minutes Christian Night Prayer for Sleep · No. 003",
+    4: "Your keeper never sleeps — Psalm 121 | 30 Minutes Christian Night Prayer for Sleep · No. 004",
+    5: "Anxious for nothing — Philippians 4:6-7 | 30 Minutes Christian Night Prayer for Sleep · No. 005",
+    6: "At His right hand, unshaken — Psalm 16:8 | 30 Minutes Christian Night Prayer for Sleep · No. 006",
+    7: "No one can snatch you away — John 10:28 | 30 Minutes Christian Night Prayer for Sleep · No. 007",
+    8: "Kept in perfect peace — Isaiah 26:3 | 30 Minutes Christian Night Prayer for Sleep · No. 008",
+    9: "He will not let you fall — Psalm 121:4 | 30 Minutes Christian Night Prayer for Sleep · No. 009",
+    10: "In peace I lie down — Psalm 4:8 | 30 Minutes Christian Night Prayer for Sleep · No. 010",
 }
 
 TITLE_TEMPLATE = ("Sleep in Grace 🕊 {minutes_h} Christian Bedtime Prayer & "
