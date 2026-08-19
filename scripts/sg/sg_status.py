@@ -45,23 +45,42 @@ def main() -> int:
     except Exception:
         wl = None
     usable = [a for a in man.get("atoms", []) if reject_reason(a, wl) is None]
-    print(f"║ 素材库   可用 {len(usable)} 条 / 全库 {len(man.get('atoms', []))}")
+    # 长片吃分子库,短片仍吃原子库 —— 两个数都要报,否则看不出谁在断档
+    mol = _j(Path.home() / "Studio/Library/sg/molecules/manifest.json",
+             {"molecules": []}).get("molecules", [])
+    themes = {m.get("master_slug") for m in mol}
+    print(f"║ 素材库   分子 {len(mol)} 条 / {len(themes)} 主题(长片)· "
+          f"原子 {len(usable)} 条(短片)")
 
-    # 成品
-    eps = sorted(SESSIONS.glob("sg_gold_*"))
-    ready = [d for d in eps if (d / f"{d.name}_rings.mp4").exists()
-             and (d / f"{d.name}.zh-Hans.srt").exists()]
-    print(f"║ 成品     {len(eps)} 期 · 六件齐备 {len(ready)} 期")
+    # 成品(分子时代:sg_mol_v3_*;旧原子期 sg_gold_* 已停产,不计)
+    eps = sorted(SESSIONS.glob("sg_mol_v3_*"))
+    passed = ready = 0
+    for d in eps:
+        meta = _j(d / f"{d.name}_session.json", {})
+        if (meta.get("content_gate") or {}).get("pass"):
+            passed += 1
+        vid = any(d.glob(f"{d.name}_rings.mp4")) or any(d.glob(f"{d.name}_pendulum.mp4"))
+        if vid and (d / f"{d.name}.zh-Hant.srt").exists():
+            ready += 1
+    print(f"║ 成品     {len(eps)} 期 · 内容门放行 {passed} · 视频+三语齐备 {ready}")
 
     # 长片发布(2026-08-17 起分子时代:未播旧片已撤回,等新管线合格再传)
     master = _j(ROOT / "config/sg_schedule_master.json", {"episodes": []})
     rows = master.get("episodes", [])
     public = [r for r in rows if r.get("published_at_actual")]
-    held = [r for r in rows if r.get("hold")]
+    scheduled = [r for r in rows
+                 if r.get("video_id") and not r.get("published_at_actual")]
+    todo_long = [r for r in rows
+                 if not r.get("video_id") and not r.get("hold")
+                 and r.get("status") == "ready"]
     pending_recall = [r for r in rows if r.get("recall_needed")]
-    print(f"║ 长片     已公开 {len(public)} · 已撤回 {len(held)}"
-          + (f" · 待撤 {len(pending_recall)}" if pending_recall else "")
-          + " · 新片等分子管线")
+    nxt = min((r["schedule_date"] for r in scheduled
+               if r.get("schedule_date", "") >= today.isoformat()), default=None)
+    last = max((r.get("schedule_date", "") for r in rows), default="—")
+    print(f"║ 长片     已公开 {len(public)} · 已传待播 {len(scheduled)}"
+          f"(下一期 {nxt or '—'}) · 待传 {len(todo_long)} · 排至 {last}")
+    if pending_recall:
+        print(f"║ ⚠ 撤回   {len(pending_recall)} 条旧视频待删(例行自动处理)")
 
     # 短片发布
     st = _j(TOYTUNE / "publish_state.json", {"uploaded": {}}).get("uploaded", {})
@@ -77,10 +96,13 @@ def main() -> int:
     # —— 下一步建议:按「会不会断档」排序,不是按事情大小 ——
     todo: list[str] = []
     if pending_recall:
-        todo.append(f"撤回续跑剩 {len(pending_recall)} 期(daily_ops 会自动续)")
-    if held:
-        todo.append("分子管线联调:build_molecule_session → content_gate "
-                    "稳定放行 → 重制期次 → 重新排播(见 RESUME.md)")
+        todo.append(f"删旧视频 {len(pending_recall)} 条(daily_ops 步骤 2 自动)")
+    if todo_long:
+        todo.append(f"续传长片 {len(todo_long)} 期(daily_ops 步骤 5,按配额)")
+    days_left = (date.fromisoformat(last) - today).days if last != "—" else 0
+    if days_left < 45:
+        todo.append(f"⚠ 长片库存剩 {days_left} 天(排至 {last})—— 该按 "
+                    f"ATOM_SUPPLY_PLAN 轨道 B 录新主题母带了")
     if buffer < 3:
         todo.append(f"短片缓冲仅 {buffer} 天:daily_ops.py 会自动补")
     todo.append("日常:daily_ops.py(评论/撤回/短片/字幕/长片/日志 六步)")

@@ -223,20 +223,47 @@ def cmd_recall(a) -> None:
     ① 只挑 published_at_actual 为空的行;② 平台端现场核实
     privacyStatus=='private'(1u,便宜);③ 核实不过就跳过并大声报告。
 
-    幂等:先给全部目标行落 recall_needed 标记(意图先落盘),再删配额
-    允许的部分;删成一条清一条标记。配额中断后重跑即续,daily_ops
-    也会在有标记时自动续跑 —— 未删干净的期次仍挂着定时公开,拖着不删
-    它会自己播出去。
+    **发起与续跑必须分离**(2026-08-19 险情):此前每次运行都从
+    「有 video_id 且未公开」重新推导目标。撤回完成、同一批行换上新内容
+    重新上传之后,残留一个 recall_needed 标记就会让 daily_ops 自动调起
+    本命令 —— 它会把**刚传上去的新片**重新推导成删除目标,而新片正是
+    private 待定时公开,连 privacyStatus 核验都拦不住。差一步删掉三期。
+
+    现在:
+      · 默认(续跑模式)  只处理已落 recall_needed 的行,删 recall_video_id
+                        记下的那个 ID。**永不推导** —— daily_ops 只走这条,
+                        因此在结构上不可能发起一次新的删除。
+      · --derive(发起)  人工显式调用才扫描未公开行、落标记、把 video_id
+                        搬进 recall_video_id(内容指针在**意图落盘时**
+                        就清空,不等删除成功)。
     """
     import quota
     master_path = ROOT / "config" / "sg_schedule_master.json"
     master = json.loads(master_path.read_text(encoding="utf-8"))
-    targets = [r for r in master.get("episodes", [])
-               if r.get("video_id") and not r.get("published_at_actual")]
-    for r in targets:                       # 意图先落盘,配额中断也不丢
-        r["recall_needed"] = True
-    master_path.write_text(json.dumps(master, ensure_ascii=False, indent=1),
-                           encoding="utf-8")
+    flagged = [r for r in master.get("episodes", []) if r.get("recall_needed")]
+
+    if getattr(a, "derive", False):
+        if flagged:
+            raise SystemExit(
+                f"⛔ 还有 {len(flagged)} 期未撤完,先跑续跑模式清零再发起新一批")
+        for r in master.get("episodes", []):
+            if r.get("video_id") and not r.get("published_at_actual"):
+                r["recall_needed"] = True
+                r["recall_video_id"] = r.pop("video_id")
+                flagged.append(r)
+        master_path.write_text(json.dumps(master, ensure_ascii=False, indent=1),
+                               encoding="utf-8")
+        print(f"发起撤回:{len(flagged)} 期意图已落盘")
+
+    targets = [r for r in flagged if r.get("recall_video_id")]
+    stale = [r for r in flagged if not r.get("recall_video_id")]
+    for r in stale:                      # 标记在、目标 ID 不在 = 无从下手
+        print(f"  ⚠ #{r['episode_number']} 有 recall_needed 但无 "
+              f"recall_video_id —— 清标记,人工核对平台")
+        r.pop("recall_needed", None)
+    if stale:
+        master_path.write_text(json.dumps(master, ensure_ascii=False, indent=1),
+                               encoding="utf-8")
     if not targets:
         print("没有待撤回的期次")
         return
@@ -244,7 +271,7 @@ def cmd_recall(a) -> None:
     targets.sort(key=lambda r: r.get("publish_at", ""))
     if a.dry_run:
         for r in targets:
-            print(f"  DRY #{r['episode_number']} {r['video_id']} "
+            print(f"  DRY #{r['episode_number']} {r['recall_video_id']} "
                   f"(原定 {r.get('schedule_date')})")
         return
     yt = build_service()
@@ -255,7 +282,11 @@ def cmd_recall(a) -> None:
                 print(f"  ⛔ 配额不足,余 {quota.remaining()}u —— "
                       f"剩 {len(targets)-done} 期留给下次(daily_ops 会自动续)")
                 break
-            vid = r["video_id"]
+            vid = r["recall_video_id"]
+            if vid == r.get("video_id"):
+                print(f"  🛑 #{r['episode_number']} {vid} 同时是本行**当前**"
+                      f"内容指针 —— 拒删,人工核对")
+                continue
             resp = yt.videos().list(part="status", id=vid).execute()
             quota.record("videos.list", f"recall-check #{r['episode_number']}")
             items = resp.get("items", [])
@@ -269,11 +300,14 @@ def cmd_recall(a) -> None:
             else:
                 print(f"  (#{r['episode_number']} 平台已不存在,只清主表)")
             r["recalled_video_id"] = vid
-            r.pop("video_id", None)
+            r.pop("recall_video_id", None)
             r.pop("recall_needed", None)
-            r["status"] = "recalled"
-            r["hold"] = True                 # 上传器护栏:此行冻结,旧文件绝不重传
-            r["caption_uploaded"] = False
+            # 行上已有新内容(重制后重传过)就别再冻结它 —— hold 会让
+            # 上传器永远跳过这一行。只有仍空着的行才冻结。
+            if not r.get("video_id"):
+                r["status"] = "recalled"
+                r["hold"] = True             # 上传器护栏:此行冻结,旧文件绝不重传
+                r["caption_uploaded"] = False
             done += 1
             print(f"  ✅ #{r['episode_number']} {vid} 已删除并冻结")
     master_path.write_text(json.dumps(master, ensure_ascii=False, indent=1),
@@ -292,6 +326,9 @@ def main() -> int:
     pr.add_argument("--dry-run", action="store_true")
     pc = sub.add_parser("recall", help="撤回未播出的长片(平台删除+主表冻结)")
     pc.add_argument("--dry-run", action="store_true")
+    pc.add_argument("--derive", action="store_true",
+                    help="发起新一批撤回(扫描未公开行)。人工显式调用专用 —— "
+                         "daily_ops 只跑续跑模式,结构上无法自行发起删除")
     a = ap.parse_args()
     {"auth": cmd_auth, "status": cmd_status,
      "reschedule": cmd_reschedule, "recall": cmd_recall}[a.cmd](a)
