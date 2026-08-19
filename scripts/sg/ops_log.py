@@ -62,24 +62,37 @@ def collect() -> dict:
         if q:
             quarantine[q] = quarantine.get(q, 0) + 1
 
-    # —— 成品(以 session.json 为准,顺带核对视频与中文字幕是否齐)——
+    # —— 成品 ——
+    # 遍历**主表行**而不是按名字前缀 glob 会话目录:主表的 episode_id 才是
+    # 「这一期实际要播什么」的权威指针。原先写死 sg_gold_* 前缀,分子管线
+    # 上线后日志继续报着已停产的原子期(2026-08-19 实测:报 8 期 18 分钟
+    # 原子片,而在播的是 9 期 30 分钟分子片)—— 记录的口径必须跟着产线走。
+    master = _load(MASTER, {"episodes": []})
     episodes = []
-    for d in sorted(SESSIONS.glob("sg_gold_*")):
-        meta = _load(d / f"{d.name}_session.json", None)
+    for r in master.get("episodes", []):
+        eid = r.get("episode_id")
+        if not eid:
+            continue
+        d = SESSIONS / eid
+        meta = _load(d / f"{eid}_session.json", None)
         if not meta:
             continue
+        gate = meta.get("content_gate") or {}
         episodes.append({
-            "id": d.name,
+            "id": eid,
+            "n": r.get("episode_number"),
             "minutes": round(float(meta.get("total_duration_sec") or 0) / 60, 1),
-            "atoms": meta.get("atom_count_used"),
-            "vo_score": (meta.get("vo_score") or {}).get("score"),
-            "video": (d / f"{d.name}_rings.mp4").exists(),
-            "zh_srt": (d / f"{d.name}.zh-Hans.srt").exists(),
-            "cover": (d / f"{d.name}_cover.jpg").exists(),
+            # 分子期报「块数/内容门」,原子期没有这两项则退回原子数/VO 分
+            "blocks": len(meta.get("molecule_ids") or []) or meta.get("atom_count_used"),
+            "gate": "✅" if gate.get("pass") else (
+                str((meta.get("vo_score") or {}).get("score") or "—")),
+            "video": bool(list(d.glob(f"{eid}_rings.mp4"))
+                          or list(d.glob(f"{eid}_pendulum.mp4"))),
+            "zh_srt": (d / f"{eid}.zh-Hant.srt").exists(),
+            "cover": (d / f"{eid}_cover.jpg").exists(),
         })
 
     # —— 长片发布 ——
-    master = _load(MASTER, {"episodes": []})
     longs = [{"n": r.get("episode_number"), "date": r.get("schedule_date"),
               "status": r.get("status"), "video_id": r.get("video_id")}
              for r in master.get("episodes", [])]
@@ -132,16 +145,17 @@ def render(s: dict) -> str:
                f"评论待补发 {len(sh['comment_pending'])} 条")
     out.append(f"**配额** {q['window']} 已用 {q['spent']}u / 10000u "
                f"({q['calls']} 次调用)")
-    out += ["", "| 期 | 时长 | 原子 | VO | 视频 | 中字 | 封面 | 排期 | 状态 |",
-            "|---|---:|---:|---:|:-:|:-:|:-:|---|---|"]
-    by_id = {f"sg_gold_{e['n']:03d}": e for e in longs if e.get("n")}
+    out += ["", "| 期 | 主题 | 时长 | 块 | 门 | 视频 | 三语 | 封面 | 排期 | 状态 |",
+            "|---|---|---:|---:|:-:|:-:|:-:|:-:|---|---|"]
+    by_n = {e["n"]: e for e in longs if e.get("n")}
     for e in eps:
-        p = by_id.get(e["id"], {})
+        p = by_n.get(e.get("n"), {})
         y = lambda b: "✅" if b else "—"
-        out.append(f"| {e['id'][-3:]} | {e['minutes']}m | {e['atoms']} | "
-                   f"{e['vo_score']} | {y(e['video'])} | {y(e['zh_srt'])} | "
-                   f"{y(e['cover'])} | {p.get('date','—')} | "
-                   f"{p.get('status','—')} |")
+        theme = e["id"].replace("sg_mol_v3_", "").replace("sg_gold_", "原子")
+        out.append(f"| {e.get('n','—')} | {theme} | {e['minutes']}m | "
+                   f"{e['blocks']} | {e['gate']} | {y(e['video'])} | "
+                   f"{y(e['zh_srt'])} | {y(e['cover'])} | "
+                   f"{p.get('date','—')} | {p.get('status','—')} |")
     return "\n".join(out)
 
 
