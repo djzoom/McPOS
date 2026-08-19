@@ -250,6 +250,12 @@ def cmd_recall(a) -> None:
             if r.get("video_id") and not r.get("published_at_actual"):
                 r["recall_needed"] = True
                 r["recall_video_id"] = r.pop("video_id")
+                # 记下这条视频属于**哪一期内容**。删除可能拖到几天后,
+                # 期间这一行完全可能换上重制的新内容 —— 到那时「要不要
+                # 冻结这一行」只能靠这个指针来判,不能靠「有没有 video_id」
+                # (2026-08-19 实测:Ep8 装着新 isa26 却被冻结,若不发现
+                #  10-03 就开天窗)。
+                r["recall_episode_id"] = r.get("episode_id")
                 flagged.append(r)
         master_path.write_text(json.dumps(master, ensure_ascii=False, indent=1),
                                encoding="utf-8")
@@ -302,9 +308,17 @@ def cmd_recall(a) -> None:
             r["recalled_video_id"] = vid
             r.pop("recall_video_id", None)
             r.pop("recall_needed", None)
-            # 行上已有新内容(重制后重传过)就别再冻结它 —— hold 会让
-            # 上传器永远跳过这一行。只有仍空着的行才冻结。
-            if not r.get("video_id"):
+            # 冻结与否看**内容指针有没有换过**:还指着被撤那一期就冻结
+            # (防旧文件重传);已换成重制内容就绝不冻结(hold 会让上传器
+            # 永远跳过它,到期开天窗)。指针不明时从严冻结并大声报告 ——
+            # 错误冻结是静默的,错误放行会把用户明令删除的内容送回平台。
+            same = r.get("recall_episode_id") == r.get("episode_id")
+            if r.get("recall_episode_id") is None:
+                print(f"  ⚠ #{r['episode_number']} 无 recall_episode_id,"
+                      f"从严冻结 —— 若该行已换新内容请人工解冻")
+                same = True
+            r.pop("recall_episode_id", None)
+            if same:
                 r["status"] = "recalled"
                 r["hold"] = True             # 上传器护栏:此行冻结,旧文件绝不重传
                 r["caption_uploaded"] = False
