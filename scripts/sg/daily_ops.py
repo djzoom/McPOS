@@ -180,6 +180,11 @@ def main() -> int:
     if healthy:
         step_captions(a.dry_run)
         step_longs(a.dry_run)
+    # 频道对账便宜(2-4u)且能抓到本地门拦不住的东西:平台上有、主表里
+    # 没有的视频会自己公开出去(F8WhUgKgOUQ 就差点)。放在最后,不与
+    # 上传抢配额。
+    if healthy and not a.dry_run and quota.can_afford(200):
+        subprocess.run([str(PY), str(HERE / "audit_channel_orphans.py")])
     print("\n[6/7] 运营日志")
     if not a.dry_run:
         subprocess.run([str(PY), str(HERE / "ops_log.py"), "--append"])
