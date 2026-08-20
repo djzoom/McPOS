@@ -6,6 +6,7 @@
 配额是共享的、短片要保持领先公开日、评论只能等视频公开后才发得出去。
 人来记这些顺序迟早会漏,所以固化成一条命令:
 
+    0) 发布链路体检   主表路径/串期/字幕/排期/标志(不花配额,不过就拦下面)
     1) 补发置顶评论   已公开却还挂着 comment_pending 的短片(便宜,先做)
     2) 撤回续跑       recall_needed 标记未清零就续删(不删会自己播出去)
     3) 短片续传       补足「领先公开日 N 天」的缓冲,不多传(配额留给别人)
@@ -53,6 +54,22 @@ def manifest_rows() -> dict[int, dict]:
         return {int(r["episode"]): r for r in csv.DictReader(f)}
 
 
+def step_audit() -> bool:
+    """发布层前置门 —— 主表体检不过就不许碰平台。
+
+    内容有十一道门,发布层此前一道也没有,于是两天内连出两次险情
+    (recall 自行推导删除目标、hold 冻结装着新内容的行)。体检只查本地
+    状态与路径、不花配额,失败即拦下所有**读主表**的步骤;短片线那几步
+    由 TOYTUNE 自己的状态驱动,不受影响,照常跑。
+    """
+    print("\n[0/7] 发布链路体检")
+    rc = subprocess.run([str(PY), str(HERE / "audit_publish_chain.py")]).returncode
+    if rc:
+        print("      ⛔ 体检未过 —— 本轮跳过撤回/字幕/长片(主表不可信),"
+              "先人工修主表")
+    return rc == 0
+
+
 def step_comments(dry: bool) -> None:
     """已公开的短片补发置顶评论 —— 评论驱动 Shorts 的再分发,别漏。"""
     st = shorts_state()
@@ -60,7 +77,7 @@ def step_comments(dry: bool) -> None:
     now = datetime.now(timezone.utc)
     due = {k: v for k, v in pending.items()
            if v.get("publish_at", "9999") <= now.isoformat()}
-    print(f"\n[1/6] 置顶评论:挂起 {len(pending)} 条,其中已公开可发 {len(due)} 条")
+    print(f"\n[1/7] 置顶评论:挂起 {len(pending)} 条,其中已公开可发 {len(due)} 条")
     if not due or dry:
         return
     sys.path.insert(0, str(TOYTUNE))
@@ -95,7 +112,7 @@ def step_shorts(dry: bool) -> None:
     now = datetime.now(timezone.utc).isoformat()
     buffered = sum(1 for v in st.values() if v.get("publish_at", "") > now)
     need = max(0, LEAD_DAYS - buffered)
-    print(f"\n[3/6] 短片:已传 {len(st)} 条 · 未公开缓冲 {buffered} 条 · 需补 {need} 条")
+    print(f"\n[3/7] 短片:已传 {len(st)} 条 · 未公开缓冲 {buffered} 条 · 需补 {need} 条")
     if not need:
         return
     if not quota.can_afford(SHORT_COST * need):
@@ -116,7 +133,7 @@ def step_recall(dry: bool) -> None:
     """
     master = json.loads((ROOT / "config/sg_schedule_master.json").read_text())
     flagged = [r for r in master["episodes"] if r.get("recall_needed")]
-    print(f"\n[2/6] 撤回续跑:剩 {len(flagged)} 期待撤")
+    print(f"\n[2/7] 撤回续跑:剩 {len(flagged)} 期待撤")
     if not flagged:
         return
     cmd = [str(PY), str(HERE / "sg_upload.py"), "recall"]
@@ -131,7 +148,7 @@ def step_captions(dry: bool) -> None:
     (Ep8 繁体)卡在配额差 51u。这一步就是让"差一点"自己收尾:
     backfill 幂等,没得补时几秒返回,补得动就补。
     """
-    print("\n[4/6] 字幕补挂")
+    print("\n[4/7] 字幕补挂")
     if dry:
         subprocess.run([str(PY), str(HERE / "backfill_captions.py"), "--dry-run"])
         return
@@ -142,7 +159,7 @@ def step_longs(dry: bool) -> None:
     master = json.loads((ROOT / "config/sg_schedule_master.json").read_text())
     todo = [r for r in master["episodes"]
             if not r.get("video_id") and not r.get("hold")]
-    print(f"\n[5/6] 长片:待传 {len(todo)} 期")
+    print(f"\n[5/7] 长片:待传 {len(todo)} 期")
     if not todo or dry:
         return
     subprocess.run([str(PY), str(HERE / "sg_batch_upload.py")])
@@ -155,12 +172,15 @@ def main() -> int:
     a = ap.parse_args()
     print(f"=== SG 每日运营 · {datetime.now().strftime('%F %H:%M')} ===")
     print(f"配额:已用 {quota.spent_today()}u · 可用 {quota.remaining()}u")
+    healthy = step_audit()
     step_comments(a.dry_run)
-    step_recall(a.dry_run)
-    step_shorts(a.dry_run)
-    step_captions(a.dry_run)
-    step_longs(a.dry_run)
-    print("\n[6/6] 运营日志")
+    if healthy:
+        step_recall(a.dry_run)
+    step_shorts(a.dry_run)          # 短片线由 TOYTUNE 状态驱动,与主表无关
+    if healthy:
+        step_captions(a.dry_run)
+        step_longs(a.dry_run)
+    print("\n[6/7] 运营日志")
     if not a.dry_run:
         subprocess.run([str(PY), str(HERE / "ops_log.py"), "--append"])
     return 0
