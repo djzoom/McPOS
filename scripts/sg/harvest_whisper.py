@@ -226,6 +226,50 @@ def span_phrases(wav: Path, model: Path, work: Path,
     return out
 
 
+def transcribe_isolated_runs(src: Path, model: Path, work: Path,
+                            noise_db: int = -40, min_sil: float = 0.35,
+                            min_run: float = 0.30, pad: float = 0.08) -> str:
+    """把每一段语音**单独**送进解码器,再拼起来 —— 幻觉的通用解药。
+
+    整段直转会幻觉,这是本管线的老病:静默进了解码器,它就在静默处编词。
+    采集期用 span 模式治过(段级 6s);2026-08-20 发现同一个病在**分子
+    内部**复发:mol_john14_003 整段直转得到「The Lord is near **death**」,
+    同模型重转一遍照样是 death —— 同模型同音频,幻觉自然复现,那根本
+    不构成独立证据。把最后一段语音单独抽出来转,或在母带上带后文转,
+    两次都是干净的「The Lord is near.」。
+
+    所以凡要「独立复核一段音频到底说了什么」,都走这里,别再整段直转。
+    阈值 -40dB 比采集期的 -45dB 严,才切得开分子内部的句间停顿。
+    """
+    work.mkdir(parents=True, exist_ok=True)
+    wav = to_wav16k(src, work / (src.stem + "_iso.wav")) \
+        if src.suffix != ".wav" else src
+    r = run(["ffmpeg", "-hide_banner", "-i", str(wav), "-af",
+             f"silencedetect=noise={noise_db}dB:d={min_sil}", "-f", "null", "-"])
+    starts = [float(x) for x in re.findall(r"silence_start: ([\d.]+)", r.stderr)]
+    ends = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", r.stderr)]
+    total = probe_duration(wav) or 0.0
+    runs, cur = [], 0.0
+    for i, st in enumerate(starts):
+        if st - cur >= min_run:
+            runs.append((cur, st))
+        cur = ends[i] if i < len(ends) else st
+    if total - cur >= min_run:
+        runs.append((cur, total))
+    out: list[str] = []
+    for i, (a0, b0) in enumerate(runs):
+        piece = work / f"{wav.stem}_r{i:03d}.wav"
+        run(["ffmpeg", "-y", "-v", "error", "-ss", f"{max(0.0, a0 - pad):.3f}",
+             "-to", f"{b0 + pad:.3f}", "-i", str(wav), str(piece)])
+        run([WHISPER_CLI, "-m", str(model), "-nt", "-l", "en", "-otxt", str(piece)])
+        t = Path(str(piece) + ".txt")
+        seg = " ".join(t.read_text(errors="ignore").split()) if t.exists() else ""
+        if seg and seg.strip().lower().rstrip(".") not in {
+                "you", "thank you", "bye", "so", "", "u"}:
+            out.append(seg)
+    return " ".join(out).strip()
+
+
 def whisper_words(wav: Path, model: Path, work: Path,
                   nth: float | None = None,
                   vad_model: Path | None = None) -> list[Word]:
