@@ -111,11 +111,10 @@ def _arbitrate(mol_path: str, model, heard: str, lib: str) -> str:
     p = Path(mol_path)
     if not p.exists():
         return "unclear"
-    wav = to_wav16k(p, WORK / (p.stem + "_arb.wav"))
-    from harvest_whisper import run as _hrun, WHISPER_CLI
-    _hrun([WHISPER_CLI, "-m", str(model), "-nt", "-l", "en", "-otxt", str(wav)])
-    txt = Path(str(wav) + ".txt")
-    clip = " ".join(txt.read_text(errors="ignore").split()) if txt.exists() else ""
+    # 逐语音段隔离转写。此前这里是「同模型重转整段」—— 同模型同音频,
+    # 幻觉一字不差地复现,根本不构成独立证据(2026-08-20 death 一案)。
+    from harvest_whisper import transcribe_isolated_runs
+    clip = transcribe_isolated_runs(p, model, WORK)
     if not clip:
         return "unclear"
     s_heard = difflib.SequenceMatcher(None, _norm_words(heard),
