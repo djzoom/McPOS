@@ -27,6 +27,7 @@ from sg_upload import build_service             # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 MASTER = ROOT / "config" / "sg_schedule_master.json"
+SHORTS_STATE = Path.home() / "Projects/TOYTUNE/publish_state.json"
 
 
 def main() -> int:
@@ -56,26 +57,47 @@ def main() -> int:
     recalled = {r.get("recalled_video_id") for r in rows if r.get("recalled_video_id")}
     by_vid = {r.get("video_id"): r for r in rows if r.get("video_id")}
 
-    orphans = [v for v in vids if v not in known]
+    # 短片由 TOYTUNE 自己的状态表管,不在长片主表里 —— 只拿主表对账的话,
+    # 14 条正常短片会被全判成孤儿(2026-08-21 实测 30 条报 20 条,几乎全是
+    # 良性)。判据要认全**所有**在册来源,再按危害分级。
+    shorts = set()
+    if SHORTS_STATE.exists():
+        shorts = {v.get("video_id")
+                  for v in json.loads(SHORTS_STATE.read_text()).get(
+                      "uploaded", {}).values() if v.get("video_id")}
+    tracked = known | shorts
+    untracked = [v for v in vids if v not in tracked]
     ghosts = sorted(known - set(vids))
 
-    print(f"═══ 频道对账 · 平台 {len(vids)} 条 · 主表在册 {len(known)} 条 ═══")
+    print(f"═══ 频道对账 · 平台 {len(vids)} 条 ═══")
+    print(f"  在册:长片 {len(known & set(vids))} · 短片 {len(shorts & set(vids))}"
+          f" · 无人记着 {len(untracked)}")
 
-    if orphans:
-        # 孤儿要看清楚:标题与定时公开时间 —— 会不会自己播出去
+    danger, historical = [], []
+    if untracked:
         det = yt.videos().list(part="snippet,status",
-                               id=",".join(orphans[:50])).execute()
+                               id=",".join(untracked[:50])).execute()
         quota.record("videos.list", "orphan-detail")
         for it in det.get("items", []):
             st = it["status"]
-            print(f"  ⚠ 孤儿 {it['id']} [{st['privacyStatus']}] "
-                  f"publishAt={st.get('publishAt', '—')}\n"
-                  f"       「{it['snippet']['title'][:64]}」"
-                  + ("  ← 会自己公开!" if st.get("publishAt") else ""))
-        if any(x in recalled for x in orphans):
-            print("  (其中带 recalled 记号的,是撤回没删净的旧片)")
-    else:
-        print("  ✅ 无孤儿:平台上每条视频都在主表在册")
+            # 真正危险的只有一类:没人记着、却挂着定时公开 —— 它会在某天
+            # 自己冒出来(F8WhUgKgOUQ 就是)。已公开的旧内容是频道历史,
+            # 不是故障。
+            (danger if st.get("publishAt") else historical).append(
+                (it["id"], st["privacyStatus"], st.get("publishAt"),
+                 it["snippet"]["title"]))
+
+    for vid_, priv, pub, title in danger:
+        mark = "(撤回没删净的旧片)" if vid_ in recalled else ""
+        print(f"  ❌ 真孤儿 {vid_} [{priv}] 将于 {pub} **自己公开** {mark}\n"
+              f"       「{title[:64]}」")
+    if not danger:
+        print("  ✅ 无真孤儿:没有「无人记着却会自己公开」的视频")
+    if historical:
+        print(f"  ℹ 历史内容 {len(historical)} 条(已公开、非本管线产出,"
+              f"属频道既往内容):")
+        for vid_, _, _, title in historical[:8]:
+            print(f"       {vid_} 「{title[:52]}」")
 
     for g in ghosts:
         r = by_vid.get(g, {})
@@ -84,7 +106,7 @@ def main() -> int:
     if not ghosts:
         print("  ✅ 无幽灵:主表在册的每条都在平台上")
 
-    return 0 if (not orphans and not ghosts) else 1
+    return 0 if (not danger and not ghosts) else 1
 
 
 if __name__ == "__main__":
