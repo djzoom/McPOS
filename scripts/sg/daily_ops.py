@@ -63,6 +63,22 @@ def step_audit() -> bool:
     由 TOYTUNE 自己的状态驱动,不受影响,照常跑。
     """
     print("\n[0/7] 发布链路体检")
+    # 凭证先查:令牌一死,所有碰平台的步骤都会失败,而它们大多「安静地
+    # 什么也没做」—— 2026-08-21 实测:令牌失效当天,例行照常跑完七步、
+    # 一句异常没报,孤儿对账其实根本没执行(错误还被我自己的 tail -30
+    # 截掉了)。凭证是整条发布链的前提,要在第一步就大声说。
+    try:
+        from sg_upload import load_creds
+        if load_creds() is None:
+            print("      ⛔ **OAuth 令牌失效** —— 所有平台操作都会失败。")
+            print("         修复:./.venv/bin/python scripts/sg/sg_upload.py "
+                  "auth --reset(浏览器授权)")
+            print("         注:已上传并定时公开的期次不受影响,YouTube 端会"
+                  "照常发布。")
+            return False
+    except Exception as exc:
+        print(f"      ⛔ 凭证检查异常: {exc}")
+        return False
     rc = subprocess.run([str(PY), str(HERE / "audit_publish_chain.py")]).returncode
     if rc:
         print("      ⛔ 体检未过 —— 本轮跳过撤回/字幕/长片(主表不可信),"

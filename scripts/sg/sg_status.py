@@ -105,7 +105,7 @@ def main() -> int:
                     f"ATOM_SUPPLY_PLAN 轨道 B 录新主题母带了")
     if buffer < 3:
         todo.append(f"短片缓冲仅 {buffer} 天:daily_ops.py 会自动补")
-    todo.append("日常:daily_ops.py(评论/撤回/短片/字幕/长片/日志 六步)")
+    todo.append("日常:daily_ops.py(体检/评论/撤回/短片/字幕/长片/对账/日志)")
 
     print("\n下一步:")
     for i, t in enumerate(todo, 1):
