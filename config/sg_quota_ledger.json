@@ -1,132 +1,66 @@
 {
-  "window": "2026-08-20",
-  "spent": 8703,
+  "window": "2026-08-26",
+  "spent": 500,
   "calls": [
     {
-      "at": "2026-08-20T07:06:56.422293+00:00",
-      "method": "videos.insert",
-      "units": 1600,
-      "note": "sg_mol_v3_isa26"
+      "at": "2026-08-26T07:21:14.806220+00:00",
+      "method": "channels.list",
+      "units": 50,
+      "note": "cover-v2 identity gate"
     },
     {
-      "at": "2026-08-20T07:06:57.986460+00:00",
-      "method": "captions.insert",
-      "units": 400,
-      "note": "sg_mol_v3_isa26 en"
-    },
-    {
-      "at": "2026-08-20T07:06:59.492857+00:00",
-      "method": "captions.insert",
-      "units": 400,
-      "note": "sg_mol_v3_isa26 zh-Hans"
-    },
-    {
-      "at": "2026-08-20T07:07:01.015097+00:00",
-      "method": "captions.insert",
-      "units": 400,
-      "note": "sg_mol_v3_isa26 zh-Hant"
-    },
-    {
-      "at": "2026-08-20T07:07:07.556063+00:00",
+      "at": "2026-08-26T07:21:20.982498+00:00",
       "method": "thumbnails.set",
       "units": 50,
-      "note": "sg_mol_v3_isa26"
+      "note": "cover-v2 #2"
     },
     {
-      "at": "2026-08-20T07:07:37.438425+00:00",
-      "method": "videos.insert",
-      "units": 1600,
-      "note": "sg_mol_v3_ps121b"
-    },
-    {
-      "at": "2026-08-20T07:07:38.988878+00:00",
-      "method": "captions.insert",
-      "units": 400,
-      "note": "sg_mol_v3_ps121b en"
-    },
-    {
-      "at": "2026-08-20T07:07:40.528047+00:00",
-      "method": "captions.insert",
-      "units": 400,
-      "note": "sg_mol_v3_ps121b zh-Hans"
-    },
-    {
-      "at": "2026-08-20T07:07:42.066078+00:00",
-      "method": "captions.insert",
-      "units": 400,
-      "note": "sg_mol_v3_ps121b zh-Hant"
-    },
-    {
-      "at": "2026-08-20T07:07:45.874581+00:00",
+      "at": "2026-08-26T07:21:25.129257+00:00",
       "method": "thumbnails.set",
       "units": 50,
-      "note": "sg_mol_v3_ps121b"
+      "note": "cover-v2 #3"
     },
     {
-      "at": "2026-08-20T07:08:22.026554+00:00",
-      "method": "videos.insert",
-      "units": 1600,
-      "note": "sg_mol_v3_ps4a"
-    },
-    {
-      "at": "2026-08-20T07:08:23.569595+00:00",
-      "method": "captions.insert",
-      "units": 400,
-      "note": "sg_mol_v3_ps4a en"
-    },
-    {
-      "at": "2026-08-20T07:08:25.000178+00:00",
-      "method": "captions.insert",
-      "units": 400,
-      "note": "sg_mol_v3_ps4a zh-Hans"
-    },
-    {
-      "at": "2026-08-20T07:08:26.350055+00:00",
-      "method": "captions.insert",
-      "units": 400,
-      "note": "sg_mol_v3_ps4a zh-Hant"
-    },
-    {
-      "at": "2026-08-20T07:08:30.236001+00:00",
+      "at": "2026-08-26T07:21:29.285042+00:00",
       "method": "thumbnails.set",
       "units": 50,
-      "note": "sg_mol_v3_ps4a"
+      "note": "cover-v2 #4"
     },
     {
-      "at": "2026-08-20T07:08:31.058141+00:00",
-      "method": "videos.list",
-      "units": 1,
-      "note": "sg_mol_v3_isa26"
-    },
-    {
-      "at": "2026-08-20T07:08:31.442017+00:00",
-      "method": "captions.list",
+      "at": "2026-08-26T07:21:34.762858+00:00",
+      "method": "thumbnails.set",
       "units": 50,
-      "note": "sg_mol_v3_isa26"
+      "note": "cover-v2 #5"
     },
     {
-      "at": "2026-08-20T07:08:31.582147+00:00",
-      "method": "videos.list",
-      "units": 1,
-      "note": "sg_mol_v3_ps121b"
-    },
-    {
-      "at": "2026-08-20T07:08:33.353233+00:00",
-      "method": "captions.list",
+      "at": "2026-08-26T07:21:41.948092+00:00",
+      "method": "thumbnails.set",
       "units": 50,
-      "note": "sg_mol_v3_ps121b"
+      "note": "cover-v2 #6"
     },
     {
-      "at": "2026-08-20T07:08:33.465297+00:00",
-      "method": "videos.list",
-      "units": 1,
-      "note": "sg_mol_v3_ps4a"
-    },
-    {
-      "at": "2026-08-20T07:08:33.833876+00:00",
-      "method": "captions.list",
+      "at": "2026-08-26T07:21:48.243939+00:00",
+      "method": "thumbnails.set",
       "units": 50,
-      "note": "sg_mol_v3_ps4a"
+      "note": "cover-v2 #7"
+    },
+    {
+      "at": "2026-08-26T07:21:55.252108+00:00",
+      "method": "thumbnails.set",
+      "units": 50,
+      "note": "cover-v2 #8"
+    },
+    {
+      "at": "2026-08-26T07:22:01.896742+00:00",
+      "method": "thumbnails.set",
+      "units": 50,
+      "note": "cover-v2 #9"
+    },
+    {
+      "at": "2026-08-26T07:22:05.988515+00:00",
+      "method": "thumbnails.set",
+      "units": 50,
+      "note": "cover-v2 #10"
     }
   ]
 }
