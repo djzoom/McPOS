@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""空中名所 · 木刻版画风飞行动画 → 16:9 MP4。
+"""空中名所 · 水墨淡彩风飞行动画 → 16:9 MP4。
 
 flight.html 是渲染引擎（Three.js），本脚本用无头 Chromium 逐帧驱动它，
 把每帧 JPEG 经管道喂给 ffmpeg。时间轴由帧号推导，同一组参数永远出同一部片。
@@ -30,7 +30,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ENGINE = HERE / "flight.html"
 SCENES = ("niigata", "tuscany", "serengeti", "bruges", "pampa", "provence", "punjab", "krumlov")
-FLYERS = ("auto", "plane", "biplane", "jet", "crane", "stork", "geese")
+FLYERS = ("auto", "spitfire", "biplane", "crane", "stork", "geese", "gull", "albatross")
+FLOCKS = ("crane", "stork", "geese", "gull", "albatross")
 PRESETS = {"4k": 3840, "2160p": 3840, "1440p": 2560, "1080p": 1920, "720p": 1280,
            "480p": 854, "360p": 640, "240p": 426, "144p": 256}
 
@@ -135,7 +136,8 @@ def main() -> None:
     ap.add_argument("--scenes", default=",".join(SCENES), help=f"景序，逗号分隔，可选 {', '.join(SCENES)}")
     ap.add_argument("--seed", type=int, default=1, help="换种子＝换一套地形、牛群与云")
     ap.add_argument("--flyer", default="auto",
-                    help="飞行物，逗号分隔则逐景轮换：auto（按景配：新潟丹顶鹤、克鲁姆洛夫白鹳、布鲁日雁阵……）/ "
+                    help="飞行物，逗号分隔则逐景轮换；鸟可带数量，如 geese:21,gull:7。"
+                         "auto 按景配（新潟丹顶鹤×3、潘帕斯信天翁×2、旁遮普雁×13、布鲁日海鸥×6……）。可选："
                          + " / ".join(FLYERS[1:]))
     ap.add_argument("--labels", choices=("zh", "en", "none"), default="zh", help="题签：中文竖排 / 英文 / 不要")
     ap.add_argument("--unique", type=parse_duration, default=None,
@@ -153,9 +155,12 @@ def main() -> None:
     if bad:
         ap.error(f"未知景名: {', '.join(bad)}")
     args.flyer = [s.strip() for s in args.flyer.split(",") if s.strip()]
-    bad = [s for s in args.flyer if s not in FLYERS]
-    if bad:
-        ap.error(f"未知飞行物: {', '.join(bad)}")
+    for spec in args.flyer:
+        kind, _, n = spec.partition(":")
+        if kind not in FLYERS:
+            ap.error(f"未知飞行物: {kind}（可选 {', '.join(FLYERS)}）")
+        if n and (kind not in FLOCKS or not n.isdigit() or not 1 <= int(n) <= 31):
+            ap.error(f"数量只能给鸟用，且在 1–31 之间: {spec}")
     width, height = args.res
     args.out = args.out.expanduser()
     args.out.parent.mkdir(parents=True, exist_ok=True)

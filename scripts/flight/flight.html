@@ -38,6 +38,7 @@
   button:hover { border-color: rgba(239, 230, 212, .35); }
   button:focus-visible { outline: 2px solid var(--shu); outline-offset: 2px; }
   button[aria-pressed="true"] { background: var(--washi); color: var(--ink); border-color: var(--washi); }
+  .count { min-width: 3.2em; text-align: center; align-self: center; font-variant-numeric: tabular-nums; color: var(--text-soft); font-size: .8rem; }
   .recipe { display: flex; flex-direction: column; gap: 8px; }
   .recipe h2 { font-size: .8rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-soft); margin: 8px 0 0; }
   pre { margin: 0; overflow-x: auto; background: var(--table-2); border-radius: 6px; padding: 12px 14px; font-family: var(--mono); font-size: .74rem; line-height: 1.6; color: var(--text); }
@@ -49,7 +50,7 @@
 <div class="wrap">
   <header>
     <h1>空中名所</h1>
-    <p>Low Flight Atlas · planes and birds over eight landscapes, cut as a colour woodblock print.</p>
+    <p>Low Flight Atlas · planes and birds over eight landscapes, washed in ink and colour on paper.</p>
   </header>
 
   <canvas id="out" width="1280" height="720" aria-label="Animated woodblock-print landscape seen from a plane"></canvas>
@@ -58,6 +59,7 @@
     <div class="group" id="scenes" role="group" aria-label="Landscape"></div>
     <span class="spacer"></span>
     <div class="group" id="flyers" role="group" aria-label="What flies"></div>
+    <div class="group" role="group" aria-label="Flock size"><button id="fewer" type="button" aria-label="Fewer birds">−</button><span id="count" class="count"></span><button id="more" type="button" aria-label="More birds">+</button></div>
     <div class="group" id="labels" role="group" aria-label="Cartouche language"></div>
     <button id="pause" type="button" aria-pressed="false">Pause</button>
   </div>
@@ -65,9 +67,9 @@
   <section class="recipe">
     <h2>Render a video</h2>
     <pre>./.venv/bin/python scripts/flight/render_flight.py --res 4k --duration 10m --out ~/Desktop/flight_4k.mp4
-./.venv/bin/python scripts/flight/render_flight.py --res 256 --duration 30 --scenes tuscany,bruges --flyer stork --out /tmp/flight_tiny.mp4
-./.venv/bin/python scripts/flight/render_flight.py --res 1080p --duration 3h --unique 20m --labels none --out flight_3h.mp4</pre>
-    <p class="note">Every frame is rendered deterministically from the seed, so the same command gives the same film. The ink lines, wood grain and paper are measured in world units, so 256 px and 4K share one composition. Each scene opens and closes on blank paper, which lets <code>--unique</code> loop a shorter render seamlessly to fill hours.</p>
+./.venv/bin/python scripts/flight/render_flight.py --res 256 --duration 30 --scenes tuscany,bruges --flyer gull:7 --out /tmp/flight_tiny.mp4
+./.venv/bin/python scripts/flight/render_flight.py --res 1080p --duration 3h --unique 20m --flyer geese:21 --labels none --out flight_3h.mp4</pre>
+    <p class="note">Every frame is rendered deterministically from the seed, so the same command gives the same film. The brush lines, washes and paper are measured in world units, so 256 px and 4K share one composition. Each scene opens and closes on blank paper, which lets <code>--unique</code> loop a shorter render seamlessly to fill hours.</p>
   </section>
 </div>
 
@@ -318,7 +320,8 @@
 
   // ================= ground shader: the colour blocks and the key block =================
   const GROUND_FS = `
-  uniform int uBiome; uniform float uS; uniform float uPh; uniform float uUPP;
+  uniform int uBiome; uniform float uS; uniform float uPh; uniform float uUPP; uniform float uSoft;
+  float gN = 0., gN2 = 0.;   // per-pixel wobble shared by every edge, set once in main()
   varying vec3 vW;
   const float OFF = 1048576.0;
   const vec3 INK = vec3(.165,.149,.137);
@@ -348,12 +351,20 @@
     return sum / n;
   }
   // coverage of a signed distance (world units, <0 inside), antialiased over one pixel
-  float cover(float sd) { return 1. - smoothstep(-uUPP*.7, uUPP*.7, sd); }
+  // wet-on-wet: every colour edge is a soft, slightly wandering bleed of width uSoft
+  float cover(float sd) { float w = max(uUPP*.7, uSoft); return 1. - smoothstep(-w, w, sd + gN * uSoft * 1.6); }
   // carved line of world width w around a boundary at unsigned distance d; width wobbles like a knife
-  float carve(float d, float w, vec2 p) { return cover(d - w * (.7 + .6*vnoise(p.x*.8, p.y*.8, 5.))); }
+  // a brush line: soft core, ink bleeding into damp paper, and places where the brush runs dry
+  float carve(float d, float w, vec2 p) {
+    float k = .6 + .8*vnoise(p.x*.8, p.y*.8, 5.);
+    float core = 1. - smoothstep(0., w*k + uUPP*.8, d + gN2*w*.8);
+    float halo = exp(-d / (w*5. + uSoft)) * .3;
+    float dry = mix(.45, 1., smoothstep(.28, .62, vnoise(p.x*1.1 + 3., p.y*1.1, 6.)));
+    return max(core * .82, halo) * dry;
+  }
   // world distance to an iso-line of a noise field
   float isoD(float n, float th) { return abs(n - th) * uUPP / max(fwidth(n), 1e-6); }
-  float aastep(float th, float n) { return clamp((n - th) / max(fwidth(n), 1e-6) + .5, 0., 1.); }
+  float aastep(float th, float n) { return cover(-(n - th) * uUPP / max(fwidth(n), 1e-6)); }
   // fade detail whose wavelength nears a pixel, so 256 px stays calm and 4K stays rich
   float lod(float wavelength) { return smoothstep(1.7, 4., wavelength / uUPP); }
   // short knife strokes scattered on a grid
@@ -385,6 +396,7 @@
       col = k < 1. ? AI_L : k < 2. ? INDIGO_L : k < 3. ? AI_M : mix(AI_L, SAGE_L, .45);
       col = mix(col, vec3(1.), .45 * (1. - fz));            // bokashi wiped across each flooded paddy
     } else col = r < .92 ? (r < .84 ? SAGE : SAGE_L) : EARTH;
+    col *= .86 + .26 * h2(ci, ri, 99.+S);
     float d = min(min(fx, 1.-fx)*cw, min(fz, 1.-fz)*ch);
     col = mix(col, SAGE_L, cover(d - .09));
     ink = max(ink, carve(abs(d - .09), .02, p) * .9);
@@ -462,6 +474,7 @@
     float px = (x + 200.)/7., pz = (z + 2000.)/10., ix = floor(px), iz = floor(pz);
     float hk = h2(ix, iz, 13.+S);
     vec3 col = hk < .3 ? GAMB : hk < .55 ? GAMB_L : hk < .8 ? GAMB_D : GAMB_P;
+    col *= .88 + .22 * h2(ix, iz, 98.+S);
     col *= 1. - .06*step(.5, fract(x*2.2 + .3*sin(z*.2))) * lod(.45);
     float pdist = min(min(px - ix, 1. - px + ix)*7., min(pz - iz, 1. - pz + iz)*10.);
     ink = max(ink, carve(pdist, .02, p) * .85);
@@ -532,6 +545,7 @@
     else if (hk < .76) col = mix(SOIL, GREEN, rowsAt(p, a, 1.6, .4));
     else if (hk < .9) col = mix(SAGE_L, OLIVE, olives(p));
     else col = GAMB_P;
+    col *= .86 + .26 * h2(g.x, g.y, 97.+S);
     float pd = min(min(f.x, 1. - f.x) * cs.x, min(f.y, 1. - f.y) * cs.y);
     ink = max(ink, carve(pd, .022, p) * .85);
     float rd = abs(x - (-6. + 7. * sin(z * .018 + uPh)));
@@ -547,6 +561,7 @@
     float oz = h2(gx, 3., 1.+S) * 22., Z = (z + oz) / 22., gz = floor(Z), fz = Z - gz;
     float hk = h2(gx, gz, 7.+S);
     vec3 col = hk < .3 ? GREEN : hk < .62 ? SAGE : hk < .85 ? SAGE_L : hk < .93 ? GAMB_L : EARTH_L;
+    col *= .86 + .26 * h2(gx, gz, 96.+S);
     float dd = min(fx, 1. - fx) * 5.;
     col = mix(col, INDIGO_L, cover(dd - .1));
     ink = max(ink, carve(abs(dd - .1), .02, p));
@@ -574,6 +589,7 @@
     else if (hk < .82) col = SAGE_L;
     else if (hk < .92) col = mix(OCHRE, OCHRE_L, .4);
     else col = mix(SOIL, OLIVE, olives(p));
+    col *= .86 + .26 * h2(g.x, g.y, 97.+S);
     float pd = min(min(f.x, 1. - f.x) * cs.x, min(f.y, 1. - f.y) * cs.y);
     ink = max(ink, carve(pd, .022, p) * .85);
     float rd = abs(x - (5. + 5. * sin(z * .015 + uPh)));
@@ -603,6 +619,8 @@
 
   void main() {
     vec2 p = vW.xz;
+    gN = vnoise(p.x*1.7, p.y*1.7, 401.) - .5;
+    gN2 = (vnoise(p.x*6., p.y*6., 402.) - .5) * lod(.17);
     float ink = 0.;
     vec3 col;
     if (uBiome == 0) col = niigata(p, ink);
@@ -613,13 +631,24 @@
     else if (uBiome == 5) col = bruges(p, ink);
     else if (uBiome == 6) col = provence(p, ink);
     else col = krumlov(p, ink);
-    // printing: goma-zuri (pigment skipping), wood grain from the colour block, then the key block on top
-    float mott = vnoise(p.x*1.3, p.y*1.3, 300.)*.6 + vnoise(p.x*5., p.y*5., 301.)*.4*lod(.2);
-    col = mix(col, vec3(1.), smoothstep(.6, .95, mott) * .2);
-    float grain = vnoise(p.x*.35, p.y*8. + vnoise(p.x*.2, p.y*.2, 302.)*6., 303.);
-    col *= 1. - .06 * smoothstep(.55, .85, grain) * lod(.125);
-    float skip = smoothstep(.72, .9, vnoise(p.x*3., p.y*3., 304.)) * lod(.33);
-    col = mix(col, INK, ink * (1. - .35*skip));
+    // pigment pools where two wet washes meet: darken along every colour edge
+    float edge = length(fwidth(col)) / uUPP * uSoft;
+    col *= 1. - .22 * smoothstep(.02, .2, edge);
+    // broad washes laid over the whole sheet: a warm lift and a cool, deeper shade
+    float lift = smoothstep(.55, .75, fbm(p.x*.018, p.y*.018, 410., 3));
+    float shade = smoothstep(.54, .72, fbm(p.x*.022 + 40., p.y*.022, 411., 3));
+    col = mix(col, min(col * 1.12 + vec3(.04, .03, 0.), vec3(1.)), lift * .55);
+    col = mix(col, col * vec3(.7, .75, .88), shade * .5);
+    col *= .93 + .14 * vnoise(p.x*.3, p.y*.3, 412.);
+    // granulation and blooms: pigment settles in the paper, water pushes it into soft rings
+    float gran = smoothstep(.62, .9, vnoise(p.x*7., p.y*7., 300.)) * lod(.14);
+    col *= 1. - .08 * gran;
+    float bloom = vnoise(p.x*.6, p.y*.6, 301.);
+    col = mix(col, vec3(1.), smoothstep(.72, .9, bloom) * .12);
+    col *= 1. - .035 * (1. - smoothstep(.0, .04, abs(bloom - .72))) * lod(.6);
+    // sumi: pale grey wash where the ink is thin, near-black only in the core
+    vec3 sumi = mix(vec3(.42, .44, .48), INK, smoothstep(.35, .85, ink));
+    col = mix(col, sumi, min(ink, 1.) * .9);
     gl_FragColor = vec4(col, 1.);
   }`;
   const GROUND_VS = `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`;
@@ -650,14 +679,14 @@
   const SUN_DIR = new THREE.Vector3(-10, 30, -12).normalize();
 
   const groundMat = new THREE.ShaderMaterial({
-    uniforms: { uBiome: { value: 0 }, uS: { value: 0 }, uPh: { value: 0 }, uUPP: { value: .03 } },
+    uniforms: { uBiome: { value: 0 }, uS: { value: 0 }, uPh: { value: 0 }, uUPP: { value: .03 }, uSoft: { value: .12 } },
     vertexShader: GROUND_VS, fragmentShader: GROUND_FS, extensions: { derivatives: true }
   });
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 80), groundMat);
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
 
-  const shadowPlane = new THREE.Mesh(new THREE.PlaneGeometry(120, 80), new THREE.ShadowMaterial({ opacity: .2, color: 0x1e3757 }));
+  const shadowPlane = new THREE.Mesh(new THREE.PlaneGeometry(120, 80), new THREE.ShadowMaterial({ opacity: .27, color: 0x24406a }));
   shadowPlane.rotation.x = -Math.PI / 2;
   shadowPlane.position.y = .01;
   shadowPlane.receiveShadow = true;
@@ -673,8 +702,8 @@
   }
   const toon = new THREE.MeshToonMaterial({ gradientMap: gradient(0, [90, 150, 205, 255]) });
   const cloudMat = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: gradient(205) });
-  const hullMat = width => new THREE.ShaderMaterial({
-    uniforms: { uW: { value: width } },
+  const hullMat = (width, ink = [.30, .30, .33]) => new THREE.ShaderMaterial({
+    uniforms: { uW: { value: width }, uC: { value: new THREE.Vector3(...ink) } },
     vertexShader: `
       uniform float uW;
       void main() {
@@ -686,10 +715,10 @@
         wp.xyz += normalize(mat3(m) * normalize(position)) * uW;
         gl_Position = projectionMatrix * viewMatrix * wp;
       }`,
-    fragmentShader: `void main(){ gl_FragColor = vec4(.165, .149, .137, 1.); }`,
+    fragmentShader: `uniform vec3 uC; void main(){ gl_FragColor = vec4(uC, 1.); }`,
     side: THREE.BackSide
   });
-  const hullTree = hullMat(.06), hullCloud = hullMat(.09), hullPlane = hullMat(.025);
+  const hullTree = hullMat(.045), hullCloud = hullMat(.06, [.62, .65, .72]), hullPlane = hullMat(.02);
   const toonSail = new THREE.MeshToonMaterial({ color: 0xefe3c8, gradientMap: gradient(150) });
 
   const blobGeo = new THREE.IcosahedronGeometry(1, 1);
@@ -801,119 +830,173 @@
   }
   let cloudRng = rng(1);
   function placeCloud(c, z, visible) {
-    c.g.position.set((cloudRng() - .5) * 46, 11 + cloudRng() * 6, z);
+    c.g.position.set((cloudRng() - .5) * 46, 6 + cloudRng() * 4, z);
     c.g.scale.setScalar(.7 + cloudRng() * .6);
     c.g.visible = visible;
   }
 
-  // ---------- flyers ----------
+  // ---------- flyers: all of them cruise above the cloud deck (clouds sit at 6–10 m) ----------
   const fm = hex => new THREE.MeshToonMaterial({ color: hex, gradientMap: gradient(160) });
-  const MAT = { white: fm(0xffffff), shu: fm(0xc8462c), ink: fm(0x2a2623), cream: fm(0xefe3c8), grey: fm(0x9a958c), goose: fm(0x8a7a66), gooseD: fm(0x4a4038), bill: fm(0x8c8a6a) };
-  function part(parent, geo, mat, s, p, rot) {
+  const MAT = {
+    white: fm(0xffffff), shu: fm(0xc8462c), ink: fm(0x2a2623), cream: fm(0xefe3c8), sage: fm(0x93a06a), canopy: fm(0x5b7290),
+    ai: fm(0x2f4f7f), goose: fm(0x8a7a66), gooseD: fm(0x4a4038), bill: fm(0x8c8a6a), gullGrey: fm(0xb3b9c0), yellow: fm(0xe3b23c),
+    sooty: fm(0x4a4642), pink: fm(0xe7a39a)
+  };
+  function part(parent, geo, mat, s, p, rot, hull = true) {
     const m = new THREE.Mesh(geo, mat); m.scale.set(...s); m.position.set(...p); if (rot) m.rotation.set(...rot); m.castShadow = true;
-    const h = new THREE.Mesh(geo, hullPlane); h.scale.copy(m.scale); h.position.copy(m.position); h.rotation.copy(m.rotation);
-    parent.add(m, h);
+    parent.add(m);
+    if (hull) { const h = new THREE.Mesh(geo, hullPlane); h.scale.copy(m.scale); h.position.copy(m.position); h.rotation.copy(m.rotation); parent.add(h); }
     return m;
   }
-  const sway = (g, lt, y, amp = 3) => {
+  const sway = (g, lt, y, amp, roll) => {
     const a = lt * .21;
     g.position.set(Math.sin(a) * amp, y, camZ + 1.5);
     g.rotation.set(0, -Math.cos(a) * .12, 0);
-    g.rotateZ(-Math.cos(a) * .35);
+    g.rotateZ(-Math.cos(a) * roll);
   };
-  function wingPair(parent, x, build) {
-    return [-1, 1].map(sg => { const pv = new THREE.Group(); pv.position.x = sg * x; build(pv, sg); parent.add(pv); return { pv, sg }; });
+
+  // elliptical planform (Spitfire wing and tailplane), lying flat, leading edge forward (-z)
+  function ellipsePlan(a, c0, lead) {
+    const sh = new THREE.Shape(), n = 48, pts = [];
+    for (let i = 0; i <= n; i++) { const x = -a + 2 * a * i / n, c = c0 * Math.sqrt(Math.max(0, 1 - (x / a) ** 2)); pts.push([x, lead * c, -(1 - lead) * c]); }
+    sh.moveTo(pts[0][0], 0);
+    pts.forEach(([x, le]) => sh.lineTo(x, le));
+    for (let i = n; i >= 0; i--) sh.lineTo(pts[i][0], pts[i][2]);
+    const g = new THREE.ExtrudeGeometry(sh, { depth: .03, bevelEnabled: false });
+    g.translate(0, 0, -.015); g.rotateX(-Math.PI / 2);
+    return g;
   }
-  function bird(o) {
+  const discGeo = new THREE.CircleGeometry(1, 28).rotateX(-Math.PI / 2);
+
+  function spitfire() {
     const g = new THREE.Group();
-    part(g, blobGeo, MAT[o.body], [.2 * o.s, .17 * o.s, .55 * o.s], [0, 0, 0]);
-    part(g, boxGeo, MAT[o.neck], [.05 * o.s, .05 * o.s, .55 * o.s], [0, .03 * o.s, -.55 * o.s]);
-    part(g, blobGeo, MAT[o.head], [.07 * o.s, .06 * o.s, .1 * o.s], [0, .04 * o.s, -.86 * o.s]);
-    part(g, boxGeo, MAT[o.billM], [.022 * o.s, .022 * o.s, .22 * o.s], [0, .03 * o.s, -1.02 * o.s]);
-    if (o.crown) part(g, blobGeo, MAT.shu, [.04 * o.s, .025 * o.s, .045 * o.s], [0, .095 * o.s, -.86 * o.s]);
-    if (o.legs) [-1, 1].forEach(sg => part(g, boxGeo, MAT[o.legs], [.03 * o.s, .03 * o.s, .5 * o.s], [sg * .04 * o.s, -.03 * o.s, .62 * o.s]));
-    if (o.bustle) part(g, blobGeo, MAT.ink, [.12 * o.s, .08 * o.s, .2 * o.s], [0, .03 * o.s, .36 * o.s]);
-    // arm (inner wing) + hand swept back + fanned primaries, so the silhouette reads as a bird, not a cross
-    const S = o.s * o.span, C = o.chord * o.s, hands = [];
-    const wings = wingPair(g, .1 * o.s, (pv, sg) => {
-      part(pv, boxGeo, MAT[o.wing], [.5 * S, .025 * o.s, C], [sg * .25 * S, 0, 0]);
-      if (o.trail) part(pv, boxGeo, MAT.ink, [.48 * S, .027 * o.s, C * .36], [sg * .25 * S, 0, C * .38]);
-      const hand = new THREE.Group(); hand.position.set(sg * .48 * S, 0, 0); hand.rotation.y = -sg * .35; pv.add(hand);
-      part(hand, boxGeo, MAT[o.wing], [.36 * S, .024 * o.s, C * .78], [sg * .18 * S, 0, 0]);
-      for (let j = 0; j < 4; j++) {
-        part(hand, boxGeo, MAT[o.tips || o.wing], [.3 * S, .02 * o.s, C * .16], [sg * .46 * S, 0, (j - 1.5) * C * .19], [0, -sg * (j * .13 - .12), 0]);
-      }
-      hands.push({ hand, sg });
+    part(g, ellipsePlan(1.12, .44, .42), MAT.sage, [1, 1, 1], [0, -.02, -.05]);
+    part(g, ellipsePlan(.36, .18, .4), MAT.sage, [1, 1, 1], [0, .01, .78]);
+    part(g, blobGeo, MAT.sage, [.105, .1, .86], [0, 0, .02]);
+    part(g, blobGeo, MAT.canopy, [.05, .05, .14], [0, .08, -.12]);
+    part(g, boxGeo, MAT.sage, [.02, .2, .2], [0, .1, .8]);
+    part(g, blobGeo, MAT.shu, [.045, .045, .08], [0, 0, -.86]);
+    [-1, 1].forEach(sg => {                      // roundels on the upper wing
+      [[.12, MAT.ai, .019], [.075, MAT.cream, .022], [.04, MAT.shu, .025]].forEach(([r, m, y]) => part(g, discGeo, m, [r, 1, r], [sg * .66, y, -.04], null, false));
     });
-    return { g, flap(t, rate, amp) {
-      const a = Math.sin(t * rate) * amp + .08;
-      wings.forEach(w => { w.pv.rotation.z = w.sg * a; });
-      hands.forEach(h => { h.hand.rotation.z = h.sg * a * .7; });
-    } };
+    const prop = new THREE.Group(); prop.position.set(0, 0, -.9);
+    [0, 2.09, 4.19].forEach(a => part(prop, boxGeo, MAT.ink, [.3, .015, .035], [Math.cos(a) * .15, Math.sin(a) * .15, 0], [0, 0, a], false));
+    g.add(prop);
+    g.scale.setScalar(1.45);
+    return { g, update(lt) { sway(g, lt, 15, 3, .35); prop.rotation.z = lt * 45; } };
   }
-  const FLYERS = {
-    plane: (() => {
-      const g = new THREE.Group();
-      [[.16, .13, 1.05, 0, 0, 0], [1.3, .035, .26, 0, 0, -.05], [.5, .03, .14, 0, 0, .44], [.03, .22, .16, 0, .1, .45]].forEach(([sx, sy, sz, x, y, z]) => part(g, boxGeo, MAT.white, [sx, sy, sz], [x, y, z]));
-      g.scale.setScalar(1.6);
-      return { g, update(lt) { sway(g, lt, 7); } };
-    })(),
-    biplane: (() => {
-      const g = new THREE.Group();
-      part(g, boxGeo, MAT.shu, [.18, .16, 1], [0, 0, 0]);
-      part(g, boxGeo, MAT.cream, [1.6, .035, .3], [0, .2, -.12]);
-      part(g, boxGeo, MAT.cream, [1.4, .03, .26], [0, -.06, -.12]);
-      part(g, boxGeo, MAT.cream, [.55, .03, .15], [0, 0, .45]);
-      part(g, boxGeo, MAT.shu, [.03, .2, .16], [0, .1, .45]);
-      const prop = new THREE.Group(); prop.position.set(0, 0, -.53); part(prop, boxGeo, MAT.ink, [.55, .02, .04], [0, 0, 0]); g.add(prop);
-      g.scale.setScalar(1.6);
-      return { g, update(lt) { sway(g, lt, 6.5); prop.rotation.z = lt * 40; } };
-    })(),
-    jet: (() => {
-      const g = new THREE.Group();
-      part(g, boxGeo, MAT.white, [.2, .18, 2], [0, 0, 0]);
-      [-1, 1].forEach(sg => {
-        part(g, boxGeo, MAT.white, [1.1, .04, .42], [sg * .52, -.02, .08], [0, sg * .55, 0]);
-        part(g, boxGeo, MAT.white, [.45, .03, .18], [sg * .22, 0, .86], [0, sg * .6, 0]);
-        part(g, boxGeo, MAT.grey, [.13, .13, .36], [sg * .45, -.1, -.08]);
-      });
-      part(g, boxGeo, MAT.shu, [.03, .32, .3], [0, .16, .9]);
-      g.scale.setScalar(1.4);
-      return { g, update(lt) { sway(g, lt, 8.5, 2); } };
-    })(),
-    crane: (() => {
-      const b = bird({ s: 1, body: 'white', neck: 'ink', head: 'white', billM: 'bill', crown: true, legs: 'ink', bustle: true, wing: 'white', span: 1.05, chord: .42, tips: null, trail: true });
-      b.g.scale.setScalar(1.5);
-      return { g: b.g, update(lt) { sway(b.g, lt, 5.5); b.g.position.y += Math.sin(lt * 4.2 - 1) * .12; b.flap(lt, 4.2, .5); } };
-    })(),
-    stork: (() => {
-      const b = bird({ s: 1, body: 'white', neck: 'white', head: 'white', billM: 'shu', crown: false, legs: 'shu', bustle: false, wing: 'white', span: 1.0, chord: .44, tips: 'ink', trail: true });
-      b.g.scale.setScalar(1.5);
-      return { g: b.g, update(lt) { sway(b.g, lt, 5.5); b.g.position.y += Math.sin(lt * 3.6 - 1) * .1; b.flap(lt, 3.6, .42); } };
-    })(),
-    geese: (() => {
-      const g = new THREE.Group(), flock = [];
-      for (let i = 0; i < 7; i++) {
-        const b = bird({ s: .55, body: 'goose', neck: 'ink', head: 'ink', billM: 'ink', crown: false, legs: null, bustle: false, wing: 'goose', span: 1, chord: .36, tips: 'gooseD', trail: false });
-        const k = Math.ceil(i / 2), sg = i % 2 ? -1 : 1;
-        b.g.position.set(sg * k * .8, 0, k * .7);
-        g.add(b.g); flock.push(b);
+  function biplane() {
+    const g = new THREE.Group();
+    part(g, boxGeo, MAT.shu, [.18, .16, 1], [0, 0, 0]);
+    part(g, boxGeo, MAT.cream, [1.6, .035, .3], [0, .2, -.12]);
+    part(g, boxGeo, MAT.cream, [1.4, .03, .26], [0, -.06, -.12]);
+    part(g, boxGeo, MAT.cream, [.55, .03, .15], [0, 0, .45]);
+    part(g, boxGeo, MAT.shu, [.03, .2, .16], [0, .1, .45]);
+    const prop = new THREE.Group(); prop.position.set(0, 0, -.53); part(prop, boxGeo, MAT.ink, [.55, .02, .04], [0, 0, 0]); g.add(prop);
+    g.scale.setScalar(1.35);
+    return { g, update(lt) { sway(g, lt, 14.5, 3, .35); prop.rotation.z = lt * 40; } };
+  }
+
+  // one bird; both wings are driven by the same phase, so they rise, fall, open and fold together
+  function bird(o) {
+    const g = new THREE.Group(), s = 1;
+    part(g, blobGeo, MAT[o.body], [.2, .17, .55], [0, 0, 0]);
+    part(g, boxGeo, MAT[o.neck], [.05, .05, o.neckL], [0, .03, -.28 - o.neckL / 2]);
+    const hz = -.3 - o.neckL;
+    part(g, blobGeo, MAT[o.head], [.07, .06, .1], [0, .04, hz]);
+    part(g, boxGeo, MAT[o.billM], [.022, .022, o.billL], [0, .03, hz - .05 - o.billL / 2]);
+    if (o.crown) part(g, blobGeo, MAT.shu, [.04, .025, .045], [0, .095, hz]);
+    if (o.legs) [-1, 1].forEach(sg => part(g, boxGeo, MAT[o.legs], [.03, .03, .5], [sg * .04, -.03, .62]));
+    if (o.bustle) part(g, blobGeo, MAT.ink, [.12, .08, .2], [0, .03, .36]);
+    if (o.tail) part(g, boxGeo, MAT[o.tail], [.16, .02, .22], [0, .01, .36]);
+    const S = o.span, C = o.chord, arms = [], hands = [];
+    [-1, 1].forEach(sg => {
+      const arm = new THREE.Group(); arm.position.x = sg * .1; g.add(arm);
+      part(arm, boxGeo, MAT[o.wing], [.5 * S, .025, C], [sg * .25 * S, 0, 0]);
+      if (o.trail) part(arm, boxGeo, MAT.ink, [.48 * S, .027, C * .36], [sg * .25 * S, 0, C * .38]);
+      const hand = new THREE.Group(); hand.position.set(sg * .48 * S, 0, 0); arm.add(hand);
+      part(hand, boxGeo, MAT[o.wing], [.36 * S, .024, C * .78], [sg * .18 * S, 0, 0]);
+      for (let j = 0; j < 4; j++) part(hand, boxGeo, MAT[o.tips || o.wing], [.3 * S, .02, C * .16], [sg * .46 * S, 0, (j - 1.5) * C * .19], [0, -sg * (j * .13 - .12), 0]);
+      arms.push({ arm, sg }); hands.push({ hand, sg });
+    });
+    g.scale.setScalar(s);
+    return {
+      g,
+      flap(t, k) {
+        const env = k.glide ? Math.pow(Math.max(0, Math.sin(t * .45)), 3) : 1;
+        const c = Math.sin(t * k.rate) * env;           // +1 wings high and open, -1 wings low
+        const lift = c * k.amp + .05 + (k.crank || 0) * .6;
+        const fold = (1 - c) / 2 * k.fold * env;         // upstroke: wings draw in toward the body
+        arms.forEach(({ arm, sg }) => arm.rotation.set(0, -sg * fold * .45, sg * lift));
+        hands.forEach(({ hand, sg }) => hand.rotation.set(0, -sg * (.3 + fold * 1.1), sg * (c * k.amp * .6 - (k.crank || 0))));
       }
-      g.scale.setScalar(1.25);
-      return { g, update(lt) { sway(g, lt, 5, 2.2); flock.forEach((b, i) => { b.flap(lt + i * .31, 7, .55); b.g.position.y = Math.sin(lt * 1.3 + i) * .08; }); } };
-    })()
+    };
+  }
+  const BIRDS = {
+    crane: { o: { body: 'white', neck: 'ink', neckL: .55, head: 'white', billM: 'bill', billL: .22, crown: true, legs: 'ink', bustle: true, wing: 'white', span: 1.05, chord: .42, trail: true }, rate: 3.4, amp: .42, fold: .55, size: 1.2, y: 14, n: 1, layout: 'v', gap: 1.7 },
+    stork: { o: { body: 'white', neck: 'white', neckL: .45, head: 'white', billM: 'shu', billL: .24, legs: 'shu', wing: 'white', span: 1, chord: .44, tips: 'ink', trail: true }, rate: 3, amp: .36, fold: .5, size: 1.2, y: 14, n: 1, layout: 'loose', gap: 3 },
+    geese: { o: { body: 'goose', neck: 'ink', neckL: .4, head: 'ink', billM: 'ink', billL: .12, wing: 'goose', span: 1, chord: .36, tips: 'gooseD', tail: 'gooseD' }, rate: 5.6, amp: .45, fold: .6, size: .62, y: 13.5, n: 9, layout: 'v', gap: .95 },
+    gull: { o: { body: 'white', neck: 'white', neckL: .18, head: 'white', billM: 'yellow', billL: .14, wing: 'gullGrey', span: 1.05, chord: .3, tips: 'ink', tail: 'white' }, rate: 4.6, amp: .42, fold: .6, crank: .28, size: .85, y: 13, n: 5, layout: 'loose', gap: 2.4 },
+    albatross: { o: { body: 'white', neck: 'white', neckL: .26, head: 'white', billM: 'pink', billL: .22, wing: 'sooty', span: 2.1, chord: .24, tips: 'ink', tail: 'sooty' }, rate: 2.4, amp: .3, fold: .2, glide: true, size: .95, y: 15, n: 1, layout: 'loose', gap: 4.5 }
   };
-  Object.values(FLYERS).forEach(f => { f.g.visible = false; scene.add(f.g); });
-  const AUTO_FLYER = { niigata: 'crane', pampa: 'biplane', serengeti: 'plane', punjab: 'geese', tuscany: 'plane', bruges: 'geese', provence: 'biplane', krumlov: 'stork' };
-  let flyerMode = ['auto'], flyer = FLYERS.plane;
+  function flock(kind, n) {
+    const k = BIRDS[kind], g = new THREE.Group(), members = [], r = rng(kind.length * 977 + n);
+    const slots = [];
+    if (k.layout === 'v') {
+      const skeins = [[0, 0], [-6.5, 7], [6.5, 9], [0, 15], [-6, 21], [6, 24]];
+      for (let i = 0; i < n; i++) {
+        const sk = Math.floor(i / 11), j = i % 11, depth = Math.ceil(j / 2), sg = j % 2 ? -1 : 1, [ox, oz] = skeins[sk % skeins.length];
+        slots.push([(ox + sg * depth * .85) * k.gap, (oz + depth * .75) * k.gap, i * .37]);
+      }
+    } else {
+      for (let i = 0; i < n; i++) {
+        let x, z, tries = 0;
+        do { const a = r() * 6.283, d = Math.sqrt(r()) * k.gap * Math.sqrt(n) * .8; x = Math.cos(a) * d; z = Math.sin(a) * d; tries++; }
+        while (tries < 30 && slots.some(([sx, sz]) => Math.hypot(sx - x, sz - z) < k.gap * .7));
+        slots.push([x, z, r() * 6.283]);
+      }
+    }
+    const cz = slots.reduce((m, sl) => m + sl[1], 0) / n;
+    slots.forEach(([x, z, ph], i) => {
+      const b = bird(k.o); b.g.position.set(x, 0, z - cz); g.add(b.g);
+      members.push({ b, ph, dy: r() * .6, wob: r() * 6.283 });
+    });
+    g.scale.setScalar(k.size);
+    return {
+      g, flock: true, n, kind,
+      update(lt) {
+        sway(g, lt, k.y, 2.4, .06);
+        members.forEach(m => {
+          m.b.flap(lt + m.ph, k);
+          m.b.g.position.y = m.dy + Math.sin(lt * 1.1 + m.wob) * .12;
+          if (k.layout === 'loose') m.b.g.rotation.y = Math.sin(lt * .3 + m.wob) * .15;
+        });
+      }
+    };
+  }
+  const FLYER_KINDS = ['spitfire', 'biplane', 'crane', 'stork', 'geese', 'gull', 'albatross'];
+  function makeFlyer(spec) {
+    const [raw, cnt] = spec.split(':'), kind = raw === 'plane' ? 'spitfire' : raw;
+    if (kind === 'biplane') return { ...biplane(), kind };
+    if (BIRDS[kind]) return flock(kind, Math.max(1, Math.min(31, parseInt(cnt, 10) || BIRDS[kind].n)));
+    return { ...spitfire(), kind: 'spitfire' };
+  }
+  const AUTO_FLYER = { niigata: 'crane:3', pampa: 'albatross:2', serengeti: 'spitfire', punjab: 'geese:13', tuscany: 'spitfire', bruges: 'gull:6', provence: 'biplane', krumlov: 'stork:2' };
+  let flyerMode = ['auto'], flyer = null, flyerSpec = '';
   function flyerFor(idx) {
-    const k = flyerMode[idx % flyerMode.length];
-    return k === 'auto' || !FLYERS[k] ? AUTO_FLYER[TL.order[idx % TL.order.length]] : k;
+    const m = flyerMode[idx % flyerMode.length];
+    return m === 'auto' ? AUTO_FLYER[TL.order[idx % TL.order.length]] : m;
+  }
+  function setFlyer(spec) {
+    if (flyer && spec === flyerSpec) return;
+    if (flyer) scene.remove(flyer.g);
+    flyer = makeFlyer(spec); flyerSpec = spec;
+    scene.add(flyer.g);
   }
 
   // ================= the sheet: paper, frame, cartouches, seal =================
   let OW = 1280, OH = 720, rect = { x: 0, y: 0, w: 0, h: 0 };
-  let paper, bokashi, frameLayer, labelLayer, labelsMode = 'zh';
+  let paper, bokashi, frameLayer, labelLayer, edgeMask, work, labelsMode = 'zh';
 
   function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
 
@@ -959,8 +1042,32 @@
   function buildFrame() {
     frameLayer = makeCanvas(OW, OH);
     const f = frameLayer.getContext('2d'), u = OH / 1080, r = rng(5);
-    f.strokeStyle = '#2a2623'; f.lineWidth = Math.max(1, 2.4 * u);
-    f.strokeRect(rect.x, rect.y, rect.w, rect.h);
+    // the picture does not stop at a ruled line: its edge is a wash that bleeds and frays into the paper
+    edgeMask = makeCanvas(OW, OH);
+    const e = edgeMask.getContext('2d'), per = 2 * (rect.w + rect.h), amp = 14 * u, ins = 10 * u;
+    const at = t => {
+      let d = t * per;
+      if (d < rect.w) return [rect.x + d, rect.y, 0, 1]; d -= rect.w;
+      if (d < rect.h) return [rect.x + rect.w, rect.y + d, -1, 0]; d -= rect.h;
+      if (d < rect.w) return [rect.x + rect.w - d, rect.y + rect.h, 0, -1]; d -= rect.w;
+      return [rect.x, rect.y + rect.h - d, 1, 0];
+    };
+    e.filter = `blur(${Math.max(1, 9 * u)}px)`;
+    e.fillStyle = '#fff'; e.beginPath();
+    for (let i = 0; i <= 600; i++) {
+      const t = i / 600, [x, y, nx, ny] = at(t), n = ins + (vnoise(t * 60, 0, 21) * .7 + vnoise(t * 240, 0, 22) * .3) * amp;
+      i ? e.lineTo(x + nx * n, y + ny * n) : e.moveTo(x + nx * n, y + ny * n);
+    }
+    e.closePath(); e.fill();
+    e.filter = 'none';
+    e.globalCompositeOperation = 'destination-out';
+    for (let i = 0; i < 900; i++) {           // dry-brush fraying
+      const t = r(), [x, y, nx, ny] = at(t), dep = ins + r() * amp * 2.2, len = (8 + r() * 40) * u;
+      e.globalAlpha = .25 + r() * .5; e.lineWidth = Math.max(.6, (.6 + r() * 2.2) * u);
+      e.beginPath(); e.moveTo(x + nx * dep, y + ny * dep); e.lineTo(x + nx * dep + ny * len, y + ny * dep + nx * len); e.stroke();
+    }
+    e.globalAlpha = 1; e.globalCompositeOperation = 'source-over';
+    work = makeCanvas(OW, OH);
     // seal: vermilion square, the character left as paper
     const s = Math.round(64 * u), sx = rect.x + Math.round(28 * u), sy = rect.y + rect.h - s - Math.round(28 * u);
     const seal = makeCanvas(s, s), c = seal.getContext('2d');
@@ -1060,8 +1167,7 @@
     camZ = 0;
     townCache.clear();
     clearChunks();
-    flyer = FLYERS[flyerFor(idx)];
-    Object.values(FLYERS).forEach(f => { f.g.visible = f === flyer; });
+    setFlyer(flyerFor(idx));
     syncChunks(camZ);
     cloudRng = rng(seed * 31 + 7);
     clouds.forEach((c, i) => placeCloud(c, 20 - i * (44 / Math.max(1, biome.clouds)) - cloudRng() * 4, i < biome.clouds));
@@ -1110,14 +1216,25 @@
   }
 
   function composite(veil) {
-    const o = octx;
+    const o = octx, w = work.getContext('2d'), u = OH / 1080;
+    // the picture on its own sheet: sharp pass, a soft bleed pass over it, top bokashi, fade, feathered edge
+    w.globalCompositeOperation = 'source-over'; w.globalAlpha = 1; w.filter = 'none';
+    w.clearRect(0, 0, OW, OH);
+    w.drawImage(glCanvas, rect.x, rect.y, rect.w, rect.h);
+    w.globalAlpha = .32; w.filter = `blur(${Math.max(.5, 3 * u)}px)`;
+    w.drawImage(glCanvas, rect.x, rect.y, rect.w, rect.h);
+    w.globalAlpha = 1; w.filter = 'none';
+    w.globalCompositeOperation = 'multiply';
+    w.drawImage(bokashi, rect.x, rect.y);
+    w.globalCompositeOperation = 'source-over';
+    if (veil > 0) { w.globalAlpha = veil; w.fillStyle = '#fff'; w.fillRect(0, 0, OW, OH); w.globalAlpha = 1; }
+    w.globalCompositeOperation = 'destination-in';
+    w.drawImage(edgeMask, 0, 0);
     o.globalCompositeOperation = 'source-over'; o.globalAlpha = 1;
     o.drawImage(paper, 0, 0);
     o.globalCompositeOperation = 'multiply';
-    o.drawImage(glCanvas, rect.x, rect.y, rect.w, rect.h);
-    o.drawImage(bokashi, rect.x, rect.y);
+    o.drawImage(work, 0, 0);
     o.globalCompositeOperation = 'source-over';
-    if (veil > 0) { o.globalAlpha = veil; o.drawImage(paper, rect.x, rect.y, rect.w, rect.h, rect.x, rect.y, rect.w, rect.h); o.globalAlpha = 1; }
     if (labelLayer && veil < 1) { o.globalAlpha = 1 - veil; o.drawImage(labelLayer, 0, 0); o.globalAlpha = 1; }
     o.drawImage(frameLayer, 0, 0);
   }
@@ -1167,17 +1284,29 @@
   });
   labelBtns[0].setAttribute('aria-pressed', 'true');
   const flyersEl = document.getElementById('flyers');
-  const flyerBtns = [['auto', 'Auto'], ['plane', 'Plane'], ['biplane', 'Biplane'], ['jet', 'Jet'], ['crane', 'Crane'], ['stork', 'Stork'], ['geese', 'Geese']].map(([k, txt]) => {
-    const b = document.createElement('button'); b.type = 'button'; b.textContent = txt;
-    b.addEventListener('click', () => {
-      flyerMode = [k];
-      flyer = FLYERS[flyerFor(curIdx)];
-      Object.values(FLYERS).forEach(f => { f.g.visible = f === flyer; });
-      flyerBtns.forEach(x => x.setAttribute('aria-pressed', String(x === b)));
-    });
+  let pickedFlyer = 'auto', flockN = 0;
+  const countEl = document.getElementById('count');
+  const applyFlyer = () => {
+    flyerMode = [pickedFlyer === 'auto' ? 'auto' : pickedFlyer + (flockN ? ':' + flockN : '')];
+    setFlyer(flyerFor(curIdx));
+    countEl.textContent = flyer.flock ? '× ' + flyer.n : '';
+  };
+  const flyerBtns = [['auto', 'Auto'], ['spitfire', 'Spitfire'], ['biplane', 'Biplane'], ['crane', 'Crane'], ['stork', 'Stork'], ['geese', 'Geese'], ['gull', 'Gulls'], ['albatross', 'Albatross']].map(([k, txt]) => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = txt; b.dataset.k = k;
+    b.addEventListener('click', () => { pickedFlyer = k; flockN = 0; applyFlyer(); flyerBtns.forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
     flyersEl.appendChild(b); return b;
   });
   flyerBtns[0].setAttribute('aria-pressed', 'true');
+  [['fewer', '−', -1], ['more', '+', 1]].forEach(([id, txt, d]) => {
+    const b = document.getElementById(id);
+    b.addEventListener('click', () => {
+      if (!flyer.flock) return;
+      if (pickedFlyer === 'auto') pickedFlyer = flyer.kind;
+      flockN = Math.max(1, Math.min(31, flyer.n + d * (flyer.n >= 9 ? 2 : 1)));
+      applyFlyer();
+      flyerBtns.forEach(x => x.setAttribute('aria-pressed', String(x.dataset.k === pickedFlyer)));
+    });
+  });
   let paused = false;
   const pauseBtn = document.getElementById('pause');
   pauseBtn.addEventListener('click', () => { paused = !paused; pauseBtn.setAttribute('aria-pressed', String(paused)); pauseBtn.textContent = paused ? 'Resume' : 'Pause'; });
@@ -1194,6 +1323,7 @@
       update(t, paused ? 0 : dt);
       const active = biome;
       sceneBtns.forEach((b, i) => b.setAttribute('aria-pressed', String(BIOMES[ORDER_DEFAULT[i]] === active)));
+      countEl.textContent = flyer.flock ? '× ' + flyer.n : '';
       requestAnimationFrame(loop);
     });
   });
