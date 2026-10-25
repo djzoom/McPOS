@@ -30,7 +30,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ENGINE = HERE / "flight.html"
 SCENES = ("niigata", "tuscany", "serengeti", "bruges", "pampa", "provence", "punjab", "krumlov")
-FLYERS = ("auto", "spitfire", "biplane", "crane", "stork", "geese", "gull", "albatross")
+FLYERS = ("auto", "spitfire", "mustang", "cub", "cessna", "dc3", "constellation", "catalina", "biplane",
+          "crane", "stork", "geese", "gull", "albatross")
 FLOCKS = ("crane", "stork", "geese", "gull", "albatross")
 PRESETS = {"4k": 3840, "2160p": 3840, "1440p": 2560, "1080p": 1920, "720p": 1280,
            "480p": 854, "360p": 640, "240p": 426, "144p": 256}
@@ -137,7 +138,7 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=1, help="换种子＝换一套地形、牛群与云")
     ap.add_argument("--flyer", default="auto",
                     help="飞行物，逗号分隔则逐景轮换；鸟可带数量，如 geese:21,gull:7。"
-                         "auto 按景配（新潟丹顶鹤×3、潘帕斯信天翁×2、旁遮普雁×13、布鲁日海鸥×6……）。可选："
+                         "auto 按景配（新潟丹顶鹤×3、塞伦盖蒂 DC-3、普罗旺斯幼兽、布鲁日海鸥×6……）。可选："
                          + " / ".join(FLYERS[1:]))
     ap.add_argument("--labels", choices=("zh", "en", "none"), default="zh", help="题签：中文竖排 / 英文 / 不要")
     ap.add_argument("--unique", type=parse_duration, default=None,

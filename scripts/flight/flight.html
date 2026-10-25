@@ -840,7 +840,7 @@
   const MAT = {
     white: fm(0xffffff), shu: fm(0xc8462c), ink: fm(0x2a2623), cream: fm(0xefe3c8), sage: fm(0x93a06a), canopy: fm(0x5b7290),
     ai: fm(0x2f4f7f), goose: fm(0x8a7a66), gooseD: fm(0x4a4038), bill: fm(0x8c8a6a), gullGrey: fm(0xb3b9c0), yellow: fm(0xe3b23c),
-    sooty: fm(0x4a4642), pink: fm(0xe7a39a)
+    sooty: fm(0x4a4642), pink: fm(0xe7a39a), cubYellow: fm(0xe8b93a), silver: fm(0xc9ccd0), navy: fm(0x51627a)
   };
   function part(parent, geo, mat, s, p, rot, hull = true) {
     const m = new THREE.Mesh(geo, mat); m.scale.set(...s); m.position.set(...p); if (rot) m.rotation.set(...rot); m.castShadow = true;
@@ -895,6 +895,95 @@
     const prop = new THREE.Group(); prop.position.set(0, 0, -.53); part(prop, boxGeo, MAT.ink, [.55, .02, .04], [0, 0, 0]); g.add(prop);
     g.scale.setScalar(1.35);
     return { g, update(lt) { sway(g, lt, 14.5, 3, .35); prop.rotation.z = lt * 40; } };
+  }
+
+  // generic planform: linear taper, optional sweep and rounded tips; built at semi-span `a`, lying flat, nose toward -z
+  function taperPlan(a, root, tip, sweep = 0, round = .05, lead = .4) {
+    const n = 40, xs = [];
+    for (let i = 0; i <= n; i++) xs.push(-a + 2 * a * i / n);
+    const at = x => {
+      const t = Math.abs(x) / a, x0 = 1 - round;
+      let c = root + (tip - root) * t;
+      if (round > 0 && t > x0) c *= Math.sqrt(Math.max(0, 1 - ((t - x0) / round) ** 2));
+      const le = lead * c - sweep * t;
+      return [le, le - c];
+    };
+    const sh = new THREE.Shape();
+    xs.forEach((x, i) => { const [le] = at(x); i ? sh.lineTo(x, le) : sh.moveTo(x, le); });
+    for (let i = n; i >= 0; i--) sh.lineTo(xs[i], at(xs[i])[1]);
+    const g = new THREE.ExtrudeGeometry(sh, { depth: .025, bevelEnabled: false });
+    g.translate(0, 0, -.0125); g.rotateX(-Math.PI / 2);
+    return g;
+  }
+  function prop(parent, blades, r, pos, props) {
+    const p = new THREE.Group(); p.position.set(...pos);
+    for (let i = 0; i < blades; i++) { const a = i / blades * 6.283; part(p, boxGeo, MAT.ink, [r, .012, r * .2], [Math.cos(a) * r / 2, Math.sin(a) * r / 2, 0], [0, 0, a], false); }
+    parent.add(p); props.push(p);
+  }
+  // every model is drawn at semi-span 1; `span` is the finished wingspan in world units (about 0.29 per metre,
+  // big airliners trimmed so they still fit the sheet)
+  function classic(kind) {
+    const g = new THREE.Group(), props = [], P = (geo, mat, s, p, rot, hull) => part(g, geo, mat, s, p, rot, hull);
+    let span = 3.2, y = 15, roll = .3;
+    if (kind === 'cub') {                       // Piper J-3 Cub: square high wing, rounded tips, all Cub yellow
+      P(taperPlan(1, .3, .3, 0, .12, .5), MAT.cubYellow, [1, 1, 1], [0, .1, -.12]);
+      P(blobGeo, MAT.cubYellow, [.085, .085, .64], [0, 0, 0]);
+      P(blobGeo, MAT.ink, [.05, .05, .07], [0, .02, -.6]);
+      P(taperPlan(.3, .13, .1, 0, .3, .5), MAT.cubYellow, [1, 1, 1], [0, .02, .55]);
+      P(boxGeo, MAT.cubYellow, [.015, .12, .12], [0, .08, .58]);
+      P(boxGeo, MAT.ink, [.012, .006, .5], [0, .087, .02], null, false);
+      prop(g, 2, .17, [0, 0, -.66], props);
+      span = 3.1;
+    } else if (kind === 'cessna') {            // Cessna 172: high wing, tapered outer panels, white with blue trim
+      P(taperPlan(1, .27, .19, .02, .06, .4), MAT.white, [1, 1, 1], [0, .1, -.1]);
+      [-1, 1].forEach(sg => P(boxGeo, MAT.ai, [.1, .03, .18], [sg * .9, .115, -.11], null, false));
+      P(blobGeo, MAT.white, [.095, .09, .75], [0, 0, 0]);
+      P(boxGeo, MAT.ai, [.02, .006, .6], [0, .09, .05], null, false);
+      P(blobGeo, MAT.canopy, [.06, .04, .12], [0, .06, -.32]);
+      P(taperPlan(.33, .15, .09, .04, .1, .4), MAT.white, [1, 1, 1], [0, .02, .62]);
+      P(boxGeo, MAT.white, [.015, .14, .16], [0, .09, .66]);
+      prop(g, 2, .17, [0, 0, -.78], props);
+      span = 3.2;
+    } else if (kind === 'mustang') {           // P-51D Mustang: straight-tapered laminar wing, bubble canopy, yellow nose
+      P(taperPlan(1, .42, .17, .06, .02, .45), MAT.silver, [1, 1, 1], [0, -.02, -.02]);
+      [-1, 1].forEach(sg => { P(discGeo, MAT.ai, [.08, 1, .08], [sg * .7, .002, -.03], null, false); P(discGeo, MAT.white, [.04, 1, .04], [sg * .7, .006, -.03], null, false); });
+      P(blobGeo, MAT.silver, [.08, .085, .87], [0, 0, 0]);
+      P(blobGeo, MAT.canopy, [.04, .045, .1], [0, .07, -.1]);
+      P(boxGeo, MAT.ink, [.03, .006, .28], [0, .083, -.45], null, false);
+      P(blobGeo, MAT.yellow, [.07, .07, .1], [0, 0, -.8]);
+      P(taperPlan(.32, .16, .08, .05, .05, .4), MAT.silver, [1, 1, 1], [0, .02, .74]);
+      P(boxGeo, MAT.silver, [.015, .15, .18], [0, .09, .78]);
+      prop(g, 4, .2, [0, 0, -.9], props);
+      span = 3.3;
+    } else if (kind === 'dc3') {               // Douglas DC-3: swept leading edge, two radials, bright fuselage, red tail
+      P(taperPlan(1, .3, .1, .1, .05, .35), MAT.silver, [1, 1, 1], [0, -.02, 0]);
+      P(blobGeo, MAT.white, [.085, .08, .66], [0, 0, .02]);
+      P(blobGeo, MAT.canopy, [.035, .02, .04], [0, .045, -.6]);
+      [-1, 1].forEach(sg => { P(blobGeo, MAT.silver, [.045, .045, .16], [sg * .27, -.01, -.13]); prop(g, 3, .11, [sg * .27, 0, -.3], props); });
+      P(taperPlan(.28, .13, .06, .05, .06, .4), MAT.silver, [1, 1, 1], [0, .01, .6]);
+      P(boxGeo, MAT.shu, [.012, .12, .13], [0, .07, .63]);
+      span = 6.2; roll = .18;
+    } else if (kind === 'constellation') {     // Lockheed Constellation: dolphin fuselage, four engines, triple tail
+      P(taperPlan(1, .26, .08, .06, .03, .4), MAT.silver, [1, 1, 1], [0, -.02, 0]);
+      P(blobGeo, MAT.white, [.075, .07, .9], [0, 0, .05]);
+      P(boxGeo, MAT.ai, [.014, .006, 1.5], [0, .05, .05], null, false);
+      [-1, 1].forEach(sg => [.22, .45].forEach(x => { P(blobGeo, MAT.silver, [.033, .033, .14], [sg * x, -.01, -.1]); prop(g, 3, .085, [sg * x, 0, -.25], props); }));
+      P(taperPlan(.32, .1, .07, .02, .05, .4), MAT.silver, [1, 1, 1], [0, .01, .82]);
+      [0, -.3, .3].forEach(x => P(boxGeo, MAT.shu, [.01, .1, .1], [x, .06, .86]));
+      span = 7.5; roll = .15;
+    } else if (kind === 'catalina') {          // PBY Catalina: parasol wing on a pylon over a boat hull, tip floats
+      P(taperPlan(1, .17, .12, 0, .08, .5), MAT.navy, [1, 1, 1], [0, .2, -.05]);
+      P(blobGeo, MAT.navy, [.062, .055, .62], [0, 0, 0]);
+      P(blobGeo, MAT.white, [.04, .03, .5], [0, -.03, .02], null, false);
+      P(blobGeo, MAT.canopy, [.035, .025, .05], [0, .05, -.4]);
+      [-1, 1].forEach(sg => { P(blobGeo, MAT.navy, [.04, .04, .14], [sg * .16, .23, -.1]); prop(g, 3, .1, [sg * .16, .23, -.22], props); P(blobGeo, MAT.white, [.02, .03, .08], [sg * .93, .12, -.07]); });
+      [-1, 1].forEach(sg => P(discGeo, MAT.white, [.05, 1, .05], [sg * .62, .222, -.06], null, false));
+      P(taperPlan(.28, .1, .07, 0, .1, .5), MAT.navy, [1, 1, 1], [0, .1, .55]);
+      P(boxGeo, MAT.navy, [.012, .14, .12], [0, .14, .58]);
+      span = 6.8; roll = .18;
+    }
+    g.scale.setScalar(span / 2);
+    return { g, kind, update(lt) { sway(g, lt, y, 3, roll); props.forEach((p, i) => { p.rotation.z = lt * 45 + i; }); } };
   }
 
   // one bird; both wings are driven by the same phase, so they rise, fall, open and fold together
@@ -974,14 +1063,15 @@
       }
     };
   }
-  const FLYER_KINDS = ['spitfire', 'biplane', 'crane', 'stork', 'geese', 'gull', 'albatross'];
+  const CLASSICS = ['cub', 'cessna', 'mustang', 'dc3', 'constellation', 'catalina'];
   function makeFlyer(spec) {
     const [raw, cnt] = spec.split(':'), kind = raw === 'plane' ? 'spitfire' : raw;
     if (kind === 'biplane') return { ...biplane(), kind };
+    if (CLASSICS.includes(kind)) return classic(kind);
     if (BIRDS[kind]) return flock(kind, Math.max(1, Math.min(31, parseInt(cnt, 10) || BIRDS[kind].n)));
     return { ...spitfire(), kind: 'spitfire' };
   }
-  const AUTO_FLYER = { niigata: 'crane:3', pampa: 'albatross:2', serengeti: 'spitfire', punjab: 'geese:13', tuscany: 'spitfire', bruges: 'gull:6', provence: 'biplane', krumlov: 'stork:2' };
+  const AUTO_FLYER = { niigata: 'crane:3', pampa: 'albatross:2', serengeti: 'dc3', punjab: 'geese:13', tuscany: 'spitfire', bruges: 'gull:6', provence: 'cub', krumlov: 'stork:2' };
   let flyerMode = ['auto'], flyer = null, flyerSpec = '';
   function flyerFor(idx) {
     const m = flyerMode[idx % flyerMode.length];
@@ -1291,7 +1381,7 @@
     setFlyer(flyerFor(curIdx));
     countEl.textContent = flyer.flock ? '× ' + flyer.n : '';
   };
-  const flyerBtns = [['auto', 'Auto'], ['spitfire', 'Spitfire'], ['biplane', 'Biplane'], ['crane', 'Crane'], ['stork', 'Stork'], ['geese', 'Geese'], ['gull', 'Gulls'], ['albatross', 'Albatross']].map(([k, txt]) => {
+  const flyerBtns = [['auto', 'Auto'], ['spitfire', 'Spitfire'], ['mustang', 'Mustang'], ['cub', 'Piper Cub'], ['cessna', 'Cessna 172'], ['dc3', 'DC-3'], ['constellation', 'Constellation'], ['catalina', 'Catalina'], ['biplane', 'Biplane'], ['crane', 'Crane'], ['stork', 'Stork'], ['geese', 'Geese'], ['gull', 'Gulls'], ['albatross', 'Albatross']].map(([k, txt]) => {
     const b = document.createElement('button'); b.type = 'button'; b.textContent = txt; b.dataset.k = k;
     b.addEventListener('click', () => { pickedFlyer = k; flockN = 0; applyFlyer(); flyerBtns.forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
     flyersEl.appendChild(b); return b;
