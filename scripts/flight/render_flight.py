@@ -29,7 +29,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ENGINE = HERE / "flight.html"
-SCENES = ("niigata", "pampa", "serengeti", "punjab")
+SCENES = ("niigata", "tuscany", "serengeti", "bruges", "pampa", "provence", "punjab", "krumlov")
+FLYERS = ("auto", "plane", "biplane", "jet", "crane", "stork", "geese")
 PRESETS = {"4k": 3840, "2160p": 3840, "1440p": 2560, "1080p": 1920, "720p": 1280,
            "480p": 854, "360p": 640, "240p": 426, "144p": 256}
 
@@ -98,7 +99,8 @@ def render_clip(args, width: int, height: int, duration: float, out: Path) -> No
             raise SystemExit("引擎没起来（three.js 加载失败？可用 --three 指定本地 three.min.js）\n" + "\n".join(errors))
         info = page.evaluate("o => FLIGHT.init(o)", {
             "width": width, "height": height, "duration": duration, "fps": args.fps,
-            "segment": args.segment, "seed": args.seed, "labels": args.labels, "scenes": args.scenes})
+            "segment": args.segment, "seed": args.seed, "labels": args.labels, "scenes": args.scenes,
+            "flyer": args.flyer})
         print(f"  引擎: {info['gl']} · {info['scenes']} 景 × {info['segment']:.1f}s · {width}×{height} · {frames} 帧", flush=True)
 
         proc = subprocess.Popen(ffmpeg, stdin=subprocess.PIPE)
@@ -132,6 +134,9 @@ def main() -> None:
     ap.add_argument("--segment", type=float, default=45, help="每一景大约多少秒（会微调到整除总时长，默认 45）")
     ap.add_argument("--scenes", default=",".join(SCENES), help=f"景序，逗号分隔，可选 {', '.join(SCENES)}")
     ap.add_argument("--seed", type=int, default=1, help="换种子＝换一套地形、牛群与云")
+    ap.add_argument("--flyer", default="auto",
+                    help="飞行物，逗号分隔则逐景轮换：auto（按景配：新潟丹顶鹤、克鲁姆洛夫白鹳、布鲁日雁阵……）/ "
+                         + " / ".join(FLYERS[1:]))
     ap.add_argument("--labels", choices=("zh", "en", "none"), default="zh", help="题签：中文竖排 / 英文 / 不要")
     ap.add_argument("--unique", type=parse_duration, default=None,
                     help="只渲染这么长的不重样片段，再无缝循环铺满总时长（长片用）")
@@ -147,6 +152,10 @@ def main() -> None:
     bad = [s for s in args.scenes if s not in SCENES]
     if bad:
         ap.error(f"未知景名: {', '.join(bad)}")
+    args.flyer = [s.strip() for s in args.flyer.split(",") if s.strip()]
+    bad = [s for s in args.flyer if s not in FLYERS]
+    if bad:
+        ap.error(f"未知飞行物: {', '.join(bad)}")
     width, height = args.res
     args.out = args.out.expanduser()
     args.out.parent.mkdir(parents=True, exist_ok=True)

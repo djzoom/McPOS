@@ -49,7 +49,7 @@
 <div class="wrap">
   <header>
     <h1>空中名所</h1>
-    <p>Low Flight Atlas · a small plane over four landscapes, cut as a colour woodblock print.</p>
+    <p>Low Flight Atlas · planes and birds over eight landscapes, cut as a colour woodblock print.</p>
   </header>
 
   <canvas id="out" width="1280" height="720" aria-label="Animated woodblock-print landscape seen from a plane"></canvas>
@@ -57,6 +57,7 @@
   <div class="controls">
     <div class="group" id="scenes" role="group" aria-label="Landscape"></div>
     <span class="spacer"></span>
+    <div class="group" id="flyers" role="group" aria-label="What flies"></div>
     <div class="group" id="labels" role="group" aria-label="Cartouche language"></div>
     <button id="pause" type="button" aria-pressed="false">Pause</button>
   </div>
@@ -64,7 +65,7 @@
   <section class="recipe">
     <h2>Render a video</h2>
     <pre>./.venv/bin/python scripts/flight/render_flight.py --res 4k --duration 10m --out ~/Desktop/flight_4k.mp4
-./.venv/bin/python scripts/flight/render_flight.py --res 256 --duration 30 --out /tmp/flight_tiny.mp4
+./.venv/bin/python scripts/flight/render_flight.py --res 256 --duration 30 --scenes tuscany,bruges --flyer stork --out /tmp/flight_tiny.mp4
 ./.venv/bin/python scripts/flight/render_flight.py --res 1080p --duration 3h --unique 20m --labels none --out flight_3h.mp4</pre>
     <p class="note">Every frame is rendered deterministically from the seed, so the same command gives the same film. The ink lines, wood grain and paper are measured in world units, so 256 px and 4K share one composition. Each scene opens and closes on blank paper, which lets <code>--unique</code> loop a shorter render seamlessly to fill hours.</p>
   </section>
@@ -86,6 +87,17 @@
     const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
     const a = h2(xi, yi, s), b = h2(xi + 1, yi, s), c = h2(xi, yi + 1, s), d = h2(xi + 1, yi + 1, s);
     return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  }
+  function fbm(x, y, s, o) {
+    let sum = 0, amp = .5, f = 1, n = 0;
+    for (let i = 0; i < o; i++) { sum += amp * vnoise(x * f, y * f, s + i * 17); n += amp; amp *= .5; f *= 2.03; }
+    return sum / n;
+  }
+  // walled towns sit on the flight line every 150 m; signed distance to the wall, positive inside
+  function townSD(x, z, sd) {
+    const k = Math.max(0, Math.floor((-60 - z) / 150 + .5));
+    const cx = (h2(k, 1, sd.S) - .5) * 16, cz = -60 - k * 150, dx = x - cx, dz = z - cz, l = Math.hypot(dx, dz) + 1e-4;
+    return 18 + 6 * vnoise(dx / l * 2 + k * 7, dz / l * 2, sd.S + 5) - l;
   }
   function rng(seed) {
     let a = seed >>> 0;
@@ -175,9 +187,134 @@
         }
         for (let i = 0; i < 10; i++) { const x = (r() - .5) * (W - 14) - 3, z = zc + (r() - .5) * L; if (!this.isWater(x)) add.animal(x, z, pick(r, [0x2e2a28, 0x3b322b, 0x6b5440]), .95, r() * 6.28, .07); }
       }
+    },
+    tuscany: {
+      id: 4, clouds: 2, zh: '托斯卡纳', zhSeason: '初夏 · 麦田与柏树', en: 'San Gimignano, Tuscany', enSeason: 'Early summer · wheat and cypress', lat: 43.467, lon: 11.043,
+      town: { block: 6.2, street: .75, roofs: [0xc46a43, 0xb85c3a, 0xd07a4e, 0xc9774f, 0xa9553a], garden: .2, towers: 10, landmark: 'duomo' },
+      roadX: (z, ph) => -6 + 7 * Math.sin(z * .018 + ph),
+      isWater() { return false; },
+      populate(zc, r, add, sd) {
+        const CYP = 0x34552f;
+        for (let z = zc - L / 2; z < zc + L / 2;) {
+          const len = 6 + r() * 10;
+          if (r() < .5) for (let zz = z; zz < Math.min(z + len, zc + L / 2); zz += 1.5) for (const sg of [-1, 1]) {
+            const x = this.roadX(zz, sd.ph) + sg * 1.15; if (townSD(x, zz, sd) < -1.5) add.blob(x, 1.5, zz, .3, 1.5, .3, CYP);
+          }
+          z += len + 3 + r() * 8;
+        }
+        for (let i = 0; i < 3; i++) {
+          const x = (r() - .5) * W * .9, z = zc + (r() - .5) * L;
+          if (townSD(x, z, sd) > -6 || Math.abs(x - this.roadX(z, sd.ph)) < 3) continue;
+          const a = r() * 6.28;
+          add.house(x, z, 2.4, .95, 1.6, a, 0xc46a43); add.house(x + 1.6, z + 1.1, 1.4, .7, 1.2, a + 1.57, 0xb85c3a);
+          for (let j = 0; j < 6; j++) add.blob(x - 2.5 + j * .9, 1.4, z + 2.6, .3, 1.4, .3, CYP);
+          if (r() < .6) add.blob(x - 2.5, 1.6, z - 1.5, 1.1, .45, 1.1, 0x4d7244);
+        }
+        if (r() < .7) {
+          const hx = (r() - .5) * W * .8, hz = zc + (r() - .5) * L * .8, dir = r() * 6.28;
+          for (let i = 0; i < 14; i++) { const x = hx + (r() - .5) * 4, z = hz + (r() - .5) * 4; if (townSD(x, z, sd) < -1) add.animal(x, z, 0xf3ecdc, .7, dir, .06); }
+        }
+      }
+    },
+    bruges: {
+      id: 5, clouds: 4, zh: '布鲁日', zhSeason: '秋 · 运河与砖顶', en: 'Bruges, Belgium', enSeason: 'Autumn · canals and brick roofs', lat: 51.209, lon: 3.224,
+      town: { block: 5.6, street: .7, roofs: [0x9b4a35, 0x8a3b2e, 0xa8573e, 0x5e5a5c, 0x8c4632], garden: .15, towers: 0, landmark: 'belfry' },
+      canalX: (z, ph) => 4 + 3 * Math.sin(z * .02 + ph),
+      isWater(x, z, sd) { const t = townSD(x, z, sd); return Math.abs(x - this.canalX(z, sd.ph)) < 1.9 || (t > -2.5 && t < -.7); },
+      populate(zc, r, add, sd) {
+        if (r() < .7) {
+          const x = (r() - .5) * W * .8, z = zc + (r() - .5) * L * .8;
+          if (townSD(x, z, sd) < -4 && !this.isWater(x, z, sd)) {
+            add.box(x, .9, z, 1.1, 1.8, 1.1, 0, 0x8a6a4a); add.house(x, z, 1.2, .5, 1.2, 0, 0x5e5a5c, 1.8);
+            add.spin(x, 1.9, z + .62, 1.6);
+          }
+        }
+        for (let z = zc - L / 2; z < zc + L / 2; z += 1.4) {
+          if (vnoise(z * .05, 3, 61 + sd.S) < .5) continue;
+          for (const sg of [-1, 1]) { const x = this.canalX(z, sd.ph) + sg * 2.4; if (townSD(x, z, sd) < -3) add.blob(x, 1.4, z, .34, 1.4, .34, 0x4d7244); }
+        }
+        const hx = (r() - .5) * W * .8, hz = zc + (r() - .5) * L * .8, dir = r() * 6.28;
+        for (let i = 0; i < 9; i++) { const x = hx + (r() - .5) * 5, z = hz + (r() - .5) * 5; if (townSD(x, z, sd) < -3 && !this.isWater(x, z, sd)) add.animal(x, z, pick(r, [0x2e2a28, 0xf3ecdc]), 1, dir, .08); }
+        for (let i = 0; i < 4; i++) { const z = zc + (r() - .5) * L, x = this.canalX(z, sd.ph) + (r() - .5) * 1.6; add.animal(x, z, 0xffffff, .55, r() < .5 ? 0 : Math.PI, .12, true); }
+      }
+    },
+    provence: {
+      id: 6, clouds: 1, zh: '普罗旺斯', zhSeason: '盛夏 · 薰衣草田', en: 'Gordes, Provence', enSeason: 'High summer · lavender in bloom', lat: 43.911, lon: 5.200,
+      town: { block: 5, street: .6, roofs: [0xd29a6a, 0xc98457, 0xdcae80, 0xbf7a52], garden: .1, towers: 0, landmark: 'chateau' },
+      roadX: (z, ph) => 5 + 5 * Math.sin(z * .015 + ph),
+      isWater() { return false; },
+      populate(zc, r, add, sd) {
+        for (let i = 0; i < 3; i++) {
+          const x = (r() - .5) * W * .9, z = zc + (r() - .5) * L;
+          if (townSD(x, z, sd) < -5 && Math.abs(x - this.roadX(z, sd.ph)) > 3) {
+            const a = r() * .4; add.house(x, z, 2.6, .8, 1.5, a, 0xd29a6a); add.house(x - .6, z + 1.4, 1.2, .6, 1.1, a + 1.57, 0xc98457);
+            for (let j = 0; j < 8; j++) add.blob(x + 3, 1.5, z - 3 + j * .9, .3, 1.5, .3, 0x34552f);
+          }
+        }
+        const hx = (r() - .5) * W * .8, hz = zc + (r() - .5) * L * .8, dir = r() * 6.28;
+        if (r() < .6) for (let i = 0; i < 16; i++) { const x = hx + (r() - .5) * 5, z = hz + (r() - .5) * 5; if (townSD(x, z, sd) < -1) add.animal(x, z, 0xf3ecdc, .7, dir, .06); }
+      }
+    },
+    krumlov: {
+      id: 7, clouds: 3, zh: '克鲁姆洛夫', zhSeason: '秋 · 河湾古城', en: 'Český Krumlov, Czechia', enSeason: 'Autumn · the town in the river bend', lat: 48.811, lon: 14.315,
+      town: { block: 5.4, street: .7, roofs: [0xc4513a, 0xd36a45, 0xb94a34, 0xcf5f3f], garden: .2, towers: 0, landmark: 'castle' },
+      riverX: (z, ph) => 9 * Math.sin(z * .045 + ph) + 2 * Math.sin(z * .11 + ph * 2),
+      isWater(x, z, sd) { return Math.abs(x - this.riverX(z, sd.ph)) < 2.3; },
+      populate(zc, r, add, sd) {
+        const G = [0x34552f, 0x3f6238, 0x2c4a2a, 0x4d6a34];
+        for (let gx = -W / 2; gx < W / 2; gx += 1.4) for (let gz = zc - L / 2; gz < zc + L / 2; gz += 1.4) {
+          const x = gx + r() * 1.2, z = gz + r() * 1.2;
+          if (fbm(x * .04, z * .04, 81 + sd.S, 3) < .58 || townSD(x, z, sd) > -1 || this.isWater(x, z, sd)) continue;
+          const s = .6 + r() * .4; add.blob(x, .8, z, s, s * .9, s, pick(r, G));
+        }
+        for (let i = 0; i < 4; i++) { const z = zc + (r() - .5) * L, x = this.riverX(z, sd.ph) + (r() - .5) * 1.4; add.animal(x, z, pick(r, [0xc8462c, 0xedc84b, 0x2f5d8c]), 1.3, r() < .5 ? 0 : Math.PI, .35, true); }
+      }
     }
   };
-  const ORDER_DEFAULT = ['niigata', 'pampa', 'serengeti', 'punjab'];
+  const ORDER_DEFAULT = ['niigata', 'tuscany', 'serengeti', 'bruges', 'pampa', 'provence', 'punjab', 'krumlov'];
+
+  // ================= towns: real gabled houses walked around warped blocks =================
+  const townCache = new Map();
+  function genTown(tk) {
+    if (townCache.has(tk)) return townCache.get(tk);
+    const st = biome.town, r = rng(sd.seed * 977 + tk * 7919 + biome.id * 31 + 5);
+    const cx = (h2(tk, 1, sd.S) - .5) * 16, cz = -60 - tk * 150;
+    const P = st.block + st.street, half = st.block / 2, ang = (r() - .5) * .8;
+    const rot = (u, v, a) => [u * Math.cos(a) - v * Math.sin(a), u * Math.sin(a) + v * Math.cos(a)];
+    const T = { houses: [], boxes: [], blobs: [] }, ok = (x, z, m) => townSD(x, z, sd) > m && !biome.isWater(x, z, sd);
+    for (let gi = -4; gi <= 4; gi++) for (let gj = -4; gj <= 4; gj++) {
+      const ba = ang + (r() - .5) * .6;
+      let [bx, bz] = rot(gi * P + (r() - .5) * .9, gj * P + (r() - .5) * .9, ang);
+      bx += cx; bz += cz;
+      if (townSD(bx, bz, sd) < half * .6) continue;
+      if (gi === 0 && gj === 0) { landmark(T, st.landmark, bx, bz, ba, r); continue; }
+      for (let side = 0; side < 4; side++) {
+        const sa = side * Math.PI / 2, inset = side % 2 ? 1.8 : 0;
+        for (let s = -half + inset; s < half - inset - .8;) {
+          const w = Math.min(1.1 + r() * .9, half - inset - s), d = 1.5 + r() * .9;
+          let [lx, lz] = rot(s + w / 2, half - d / 2, sa); [lx, lz] = rot(lx, lz, ba);
+          const x = bx + lx, z = bz + lz;
+          if (ok(x, z, .9)) T.houses.push({ x, z, sx: w * .96, sy: .7 + r() * .5, sz: d, ry: -(ba + sa), c: pick(r, st.roofs) });
+          s += w;
+        }
+      }
+      if (r() < st.garden && ok(bx, bz, 1)) { const s = .7 + r() * .5; T.blobs.push({ x: bx, y: .8, z: bz, sx: s, sy: s * .85, sz: s, c: 0x4d7244 }); }
+    }
+    for (let i = 0; i < st.towers && T.houses.length; i++) {
+      const h = T.houses[Math.floor(r() * T.houses.length)], th = 3.5 + r() * 2.8;
+      T.boxes.push({ x: h.x, y: th / 2, z: h.z, sx: 1, sy: th, sz: 1, ry: h.ry, c: 0xcdb38a });
+    }
+    townCache.set(tk, T);
+    return T;
+  }
+  function landmark(T, kind, x, z, a, r) {
+    const ry = -a, H = (dx, dz, sx, sy, sz, c, ra = 0) => { const [u, v] = [dx * Math.cos(a) - dz * Math.sin(a), dx * Math.sin(a) + dz * Math.cos(a)]; T.houses.push({ x: x + u, z: z + v, sx, sy, sz, ry: ry + ra, c }); };
+    const B = (dx, dz, sx, sy, sz, c) => { const [u, v] = [dx * Math.cos(a) - dz * Math.sin(a), dx * Math.sin(a) + dz * Math.cos(a)]; T.boxes.push({ x: x + u, y: sy / 2, z: z + v, sx, sy, sz, ry, c }); };
+    if (kind === 'duomo') { H(0, -1.2, 5.4, 2.1, 2.4, 0xb85c3a); B(2.4, .9, 1.2, 4.8, 1.2, 0xe2d4b6); B(-2.6, 1.8, 1, 5.6, 1, 0xcdb38a); }
+    else if (kind === 'belfry') { H(0, -1.6, 4.6, 2.2, 2.2, 0x5e5a5c); B(0, 1.4, 1.8, 7, 1.8, 0x9b5a3e); B(0, 1.4, 1.1, 7.6, 1.1, 0x5e5a5c); }
+    else if (kind === 'chateau') { B(0, 0, 3.4, 2.2, 2.6, 0xd8c9a6); B(1.9, -1.4, 1, 3.2, 1, 0xd8c9a6); B(-1.9, 1.4, 1, 3.2, 1, 0xd8c9a6); H(0, 2.4, 3, 1.4, 1.4, 0xc98457); }
+    else if (kind === 'castle') { H(-1.2, 0, 1.8, 1.6, 4.8, 0xc4513a, Math.PI / 2); H(1.3, -.4, 1.6, 1.5, 4, 0xd36a45, Math.PI / 2); B(1.4, 2.2, 1.4, 5.8, 1.4, 0xe8dcc0); B(1.4, 2.2, .9, 6.4, .9, 0x6f9a8a); }
+  }
 
   // ================= ground shader: the colour blocks and the key block =================
   const GROUND_FS = `
@@ -192,6 +329,7 @@
   const vec3 GAMB = vec3(.929,.784,.294), GAMB_L = vec3(.953,.847,.471), GAMB_D = vec3(.886,.706,.227), GAMB_P = vec3(.949,.875,.557);
   const vec3 EARTH = vec3(.608,.463,.314), EARTH_L = vec3(.792,.667,.494), STONE = vec3(.812,.776,.678), STONE_L = vec3(.878,.851,.769);
   const vec3 TEAL = vec3(.247,.498,.525), TEAL_D = vec3(.173,.369,.400), RED_EARTH = vec3(.706,.345,.227);
+  const vec3 LAV = vec3(.541,.435,.690), LAV_D = vec3(.424,.353,.588), SOIL = vec3(.788,.706,.541), OLIVE = vec3(.549,.604,.431);
 
   float h2(float x, float y, float s) {
     uint h = (uint(x + OFF) * 374761393u) ^ (uint(y + OFF) * 668265263u) ^ (uint(s) * 2246822519u);
@@ -348,6 +486,121 @@
     return col;
   }
 
+  // ---- European towns: same signed distance as townSD() in JS ----
+  float townSD(vec2 p) {
+    float k = max(0., floor((-60. - p.y) / 150. + .5));
+    vec2 c = vec2((h2(k, 1., uS) - .5) * 16., -60. - k * 150.);
+    vec2 d = p - c; float l = length(d) + 1e-4;
+    return 18. + 6. * vnoise(d.x / l * 2. + k * 7., d.y / l * 2., uS + 5.) - l;
+  }
+  vec3 town(vec2 p, vec3 col, float tsd, vec3 pave, bool moat, inout float ink) {
+    float inside = cover(-tsd);
+    ink *= 1. - cover(-tsd + .05);
+    col = mix(col, pave, inside);
+    vec2 cg = fract(p * 2.2) - .5;
+    col = mix(col, col * .96, inside * cover((.5 - max(abs(cg.x), abs(cg.y))) / 2.2 - .015) * lod(.45));
+    if (moat) {
+      col = mix(col, STONE, cover(abs(tsd + .4) - .4));
+      float w = abs(tsd + 1.6) - .8;
+      col = mix(col, mix(INDIGO, INDIGO_D, cover(abs(tsd + 1.6) - .3)), cover(w));
+      col = mix(col, INDIGO_L, ripples(p, 1.3) * cover(w + .15));
+      ink = max(ink, carve(abs(tsd + .8), .035, p));
+      ink = max(ink, carve(abs(tsd + 2.4), .035, p));
+      ink = max(ink, carve(abs(tsd), .025, p));
+    } else {
+      col = mix(col, mix(STONE, EARTH_L, .3), cover(abs(tsd + .35) - .35));
+      ink = max(ink, carve(abs(tsd), .03, p));
+      ink = max(ink, carve(abs(tsd + .7), .035, p));
+    }
+    return col;
+  }
+  // rows ploughed or planted at an angle; far away they settle to their average tone
+  float rowsAt(vec2 p, float a, float k, float fill) {
+    return mix(fill, 1. - step(fill, fract(dot(p, vec2(cos(a), sin(a))) * k)), lod(1. / k));
+  }
+  float olives(vec2 p) { vec2 og = fract(p / 1.4) - .5; return mix(.25, cover(length(og) * 1.4 - .36), lod(1.4)); }
+
+  vec3 tuscany(vec2 p, inout float ink) {
+    float x = p.x, z = p.y, S = uS;
+    vec2 q = p + vec2(vnoise(x*.04, z*.04, 3.+S) - .5, vnoise(x*.04 + 9., z*.04, 4.+S) - .5) * 10.;
+    vec2 cs = vec2(9., 7.), g = floor(q / cs), f = q / cs - g;
+    float hk = h2(g.x, g.y, 13.+S), a = h2(g.x, g.y, 14.+S) * 3.1416;
+    vec3 col;
+    if (hk < .22) col = OCHRE_L;
+    else if (hk < .36) col = SAGE;
+    else if (hk < .52) col = mix(EARTH_L, EARTH, rowsAt(p, a, 1.6, .5) * .7);
+    else if (hk < .76) col = mix(SOIL, GREEN, rowsAt(p, a, 1.6, .4));
+    else if (hk < .9) col = mix(SAGE_L, OLIVE, olives(p));
+    else col = GAMB_P;
+    float pd = min(min(f.x, 1. - f.x) * cs.x, min(f.y, 1. - f.y) * cs.y);
+    ink = max(ink, carve(pd, .022, p) * .85);
+    float rd = abs(x - (-6. + 7. * sin(z * .018 + uPh)));
+    col = mix(col, STONE_L, cover(rd - .5));
+    ink *= 1. - cover(rd - .45);
+    ink = max(ink, carve(abs(rd - .5), .03, p));
+    return town(p, col, townSD(p), STONE_L, false, ink);
+  }
+
+  vec3 bruges(vec2 p, inout float ink) {
+    float x = p.x, z = p.y, S = uS;
+    float gx = floor((x + 200.) / 5.), fx = (x + 200.) / 5. - gx;
+    float oz = h2(gx, 3., 1.+S) * 22., Z = (z + oz) / 22., gz = floor(Z), fz = Z - gz;
+    float hk = h2(gx, gz, 7.+S);
+    vec3 col = hk < .3 ? GREEN : hk < .62 ? SAGE : hk < .85 ? SAGE_L : hk < .93 ? GAMB_L : EARTH_L;
+    float dd = min(fx, 1. - fx) * 5.;
+    col = mix(col, INDIGO_L, cover(dd - .1));
+    ink = max(ink, carve(abs(dd - .1), .02, p));
+    float dh = min(fz, 1. - fz) * 22.;
+    col = mix(col, GREEN_D, cover(dh - .12) * (1. - cover(dd - .1)));
+    col = town(p, col, townSD(p), STONE_L, true, ink);
+    float dc = abs(x - (4. + 3. * sin(z * .02 + uPh)));
+    ink *= 1. - cover(dc - 1.8);
+    col = mix(col, STONE, cover(dc - 1.8));
+    col = mix(col, mix(INDIGO_D, INDIGO, smoothstep(0., 1.4, dc)), cover(dc - 1.4));
+    col = mix(col, INDIGO_L, ripples(p, 1.3) * cover(dc - 1.2));
+    ink = max(ink, carve(abs(dc - 1.4), .035, p));
+    ink = max(ink, carve(abs(dc - 1.8), .03, p));
+    return col;
+  }
+
+  vec3 provence(vec2 p, inout float ink) {
+    float x = p.x, z = p.y, S = uS;
+    vec2 q = p + vec2(vnoise(x*.035, z*.035, 23.+S) - .5, vnoise(x*.035 + 9., z*.035, 24.+S) - .5) * 12.;
+    vec2 cs = vec2(8., 8.), g = floor(q / cs), f = q / cs - g;
+    float hk = h2(g.x, g.y, 33.+S), a = h2(g.x, g.y, 34.+S) * 3.1416;
+    vec3 col;
+    if (hk < .5) col = mix(SOIL, h2(g.x, g.y, 35.+S) < .5 ? LAV : LAV_D, rowsAt(p, a, 1.8, .55));
+    else if (hk < .68) col = GAMB_L;
+    else if (hk < .82) col = SAGE_L;
+    else if (hk < .92) col = mix(OCHRE, OCHRE_L, .4);
+    else col = mix(SOIL, OLIVE, olives(p));
+    float pd = min(min(f.x, 1. - f.x) * cs.x, min(f.y, 1. - f.y) * cs.y);
+    ink = max(ink, carve(pd, .022, p) * .85);
+    float rd = abs(x - (5. + 5. * sin(z * .015 + uPh)));
+    col = mix(col, EARTH_L, cover(rd - .45));
+    ink *= 1. - cover(rd - .4);
+    ink = max(ink, carve(abs(rd - .45), .03, p));
+    return town(p, col, townSD(p), STONE, false, ink);
+  }
+
+  vec3 krumlov(vec2 p, inout float ink) {
+    float x = p.x, z = p.y, S = uS;
+    float m = fbm(x*.07, z*.07, 91.+S, 3);
+    vec3 col = mix(SAGE, SAGE_L, aastep(.5, m));
+    float fo = fbm(x*.04, z*.04, 81.+S, 3);
+    col = mix(col, GREEN_D, aastep(.56, fo));
+    ink = max(ink, carve(isoD(fo, .56), .03, p));
+    col = town(p, col, townSD(p), STONE_L, false, ink);
+    float rx = 9. * sin(z * .045 + uPh) + 2. * sin(z * .11 + uPh * 2.), dr = abs(x - rx);
+    ink *= 1. - cover(dr - 2.2);
+    col = mix(col, STONE, cover(dr - 2.2));
+    col = mix(col, mix(INDIGO_D, INDIGO, smoothstep(0., 1.8, dr)), cover(dr - 1.8));
+    col = mix(col, INDIGO_L, ripples(p, 1.2) * cover(dr - 1.6));
+    ink = max(ink, carve(abs(dr - 1.8), .04, p));
+    ink = max(ink, carve(abs(dr - 2.2), .03, p));
+    return col;
+  }
+
   void main() {
     vec2 p = vW.xz;
     float ink = 0.;
@@ -355,7 +608,11 @@
     if (uBiome == 0) col = niigata(p, ink);
     else if (uBiome == 1) col = pampa(p, ink);
     else if (uBiome == 2) col = serengeti(p, ink);
-    else col = punjab(p, ink);
+    else if (uBiome == 3) col = punjab(p, ink);
+    else if (uBiome == 4) col = tuscany(p, ink);
+    else if (uBiome == 5) col = bruges(p, ink);
+    else if (uBiome == 6) col = provence(p, ink);
+    else col = krumlov(p, ink);
     // printing: goma-zuri (pigment skipping), wood grain from the colour block, then the key block on top
     float mott = vnoise(p.x*1.3, p.y*1.3, 300.)*.6 + vnoise(p.x*5., p.y*5., 301.)*.4*lod(.2);
     col = mix(col, vec3(1.), smoothstep(.6, .95, mott) * .2);
@@ -407,12 +664,14 @@
   shadowPlane.renderOrder = 1;
   scene.add(shadowPlane);
 
-  function gradient(lo) {
-    const t = new THREE.DataTexture(new Uint8Array([lo, lo, lo, 255, 255, 255, 255, 255]), 2, 1, THREE.RGBAFormat);
+  function gradient(lo, steps) {
+    const v = steps || [lo, 255], d = new Uint8Array(v.length * 4);
+    v.forEach((x, i) => d.set([x, x, x, 255], i * 4));
+    const t = new THREE.DataTexture(d, v.length, 1, THREE.RGBAFormat);
     t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true;
     return t;
   }
-  const toon = new THREE.MeshToonMaterial({ gradientMap: gradient(90) });
+  const toon = new THREE.MeshToonMaterial({ gradientMap: gradient(0, [90, 150, 205, 255]) });
   const cloudMat = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: gradient(205) });
   const hullMat = width => new THREE.ShaderMaterial({
     uniforms: { uW: { value: width } },
@@ -431,10 +690,19 @@
     side: THREE.BackSide
   });
   const hullTree = hullMat(.06), hullCloud = hullMat(.09), hullPlane = hullMat(.025);
+  const toonSail = new THREE.MeshToonMaterial({ color: 0xefe3c8, gradientMap: gradient(150) });
 
   const blobGeo = new THREE.IcosahedronGeometry(1, 1);
   const boxGeo = new THREE.BoxGeometry(1, 1, 1);
   const cloudGeo = new THREE.SphereGeometry(1, 20, 14);
+  // a gabled house: walls to 0.6, ridge at 1.0, ridge running along x
+  const houseGeo = (() => {
+    const s = new THREE.Shape();
+    s.moveTo(-.5, 0); s.lineTo(.5, 0); s.lineTo(.5, .6); s.lineTo(0, 1); s.lineTo(-.5, .6); s.closePath();
+    const g = new THREE.ExtrudeGeometry(s, { depth: 1, bevelEnabled: false });
+    g.translate(0, 0, -.5); g.rotateY(Math.PI / 2);
+    return g;
+  })();
   const dummy = new THREE.Object3D();
   const tmpColor = new THREE.Color();
 
@@ -443,14 +711,27 @@
   let biome = BIOMES.niigata, sd = { seed: 1, S: 131, ph: 1.7 };
 
   function buildChunk(k) {
-    const zc = -k * L, blobs = [], boxes = [], animals = [];
+    const zc = -k * L, blobs = [], boxes = [], animals = [], houses = [], spinners = [];
     const add = {
       blob: (x, y, z, sx, sy, sz, c) => blobs.push({ x, y, z, sx, sy, sz, c }),
       box: (x, y, z, sx, sy, sz, ry, c) => boxes.push({ x, y, z, sx, sy, sz, ry, c }),
-      animal: (x, z, c, s, h, v) => animals.push({ x, z, c, s, h, v, tw: 0 })
+      house: (x, z, sx, sy, sz, ry, c, y = 0) => houses.push({ x, y, z, sx, sy, sz, ry, c }),
+      spin: (x, y, z, size) => spinners.push({ x, y, z, size }),
+      animal: (x, z, c, s, h, v, aq = false) => animals.push({ x, z, c, s, h, v, aq, tw: 0 })
     };
     const r = rng(sd.seed * 7919 + k * 104729 + biome.id * 15485863 + 13);
     biome.populate(zc, r, add, sd);
+    if (biome.town) {
+      const inChunk = o => o.z >= zc - L / 2 && o.z < zc + L / 2;
+      const tk = Math.max(0, Math.floor((-60 - zc) / 150 + .5));
+      for (const t of [tk - 1, tk, tk + 1]) {
+        if (t < 0) continue;
+        const T = genTown(t);
+        T.houses.filter(inChunk).forEach(h => houses.push({ y: 0, ...h }));
+        T.boxes.filter(inChunk).forEach(b => boxes.push(b));
+        T.blobs.filter(inChunk).forEach(b => blobs.push(b));
+      }
+    }
     animals.forEach(a => { a.v *= .4 + r(); a.tw = r() * 10; });
     const group = new THREE.Group();
     const mk = (geo, list, hull) => {
@@ -467,6 +748,18 @@
     };
     mk(blobGeo, blobs, hullTree);
     mk(boxGeo, boxes, hullTree);
+    mk(houseGeo, houses, hullTree);
+    const spins = spinners.map(s => {
+      const g = new THREE.Group();
+      g.position.set(s.x, s.y, s.z);
+      [0, Math.PI / 2].forEach(a => {
+        const m = new THREE.Mesh(boxGeo, toonSail); m.scale.set(s.size * 2, .22, .05); m.rotation.z = a; m.castShadow = true;
+        const h = new THREE.Mesh(boxGeo, hullPlane); h.scale.copy(m.scale); h.rotation.copy(m.rotation);
+        g.add(m, h);
+      });
+      group.add(g);
+      return g;
+    });
     let am = null;
     if (animals.length) {
       am = new THREE.InstancedMesh(boxGeo, toon, animals.length);
@@ -475,7 +768,7 @@
       group.add(am);
     }
     scene.add(group);
-    return { k, zc, group, animals: am ? { mesh: am, list: animals } : null };
+    return { k, zc, group, spins, animals: am ? { mesh: am, list: animals } : null };
   }
   function dropChunk(c) {
     c.group.children.forEach(m => m.dispose && m.dispose());
@@ -513,16 +806,110 @@
     c.g.visible = visible;
   }
 
-  // ---------- plane ----------
-  const plane = new THREE.Group();
-  const planeMat = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: gradient(160) });
-  [[.16, .13, 1.05, 0, 0, 0], [1.3, .035, .26, 0, 0, -.05], [.5, .03, .14, 0, 0, .44], [.03, .22, .16, 0, .1, .45]].forEach(([sx, sy, sz, x, y, z]) => {
-    const m = new THREE.Mesh(boxGeo, planeMat); m.scale.set(sx, sy, sz); m.position.set(x, y, z); m.castShadow = true;
-    const h = new THREE.Mesh(boxGeo, hullPlane); h.scale.copy(m.scale); h.position.copy(m.position);
-    plane.add(m, h);
-  });
-  plane.scale.setScalar(1.6);
-  scene.add(plane);
+  // ---------- flyers ----------
+  const fm = hex => new THREE.MeshToonMaterial({ color: hex, gradientMap: gradient(160) });
+  const MAT = { white: fm(0xffffff), shu: fm(0xc8462c), ink: fm(0x2a2623), cream: fm(0xefe3c8), grey: fm(0x9a958c), goose: fm(0x8a7a66), gooseD: fm(0x4a4038), bill: fm(0x8c8a6a) };
+  function part(parent, geo, mat, s, p, rot) {
+    const m = new THREE.Mesh(geo, mat); m.scale.set(...s); m.position.set(...p); if (rot) m.rotation.set(...rot); m.castShadow = true;
+    const h = new THREE.Mesh(geo, hullPlane); h.scale.copy(m.scale); h.position.copy(m.position); h.rotation.copy(m.rotation);
+    parent.add(m, h);
+    return m;
+  }
+  const sway = (g, lt, y, amp = 3) => {
+    const a = lt * .21;
+    g.position.set(Math.sin(a) * amp, y, camZ + 1.5);
+    g.rotation.set(0, -Math.cos(a) * .12, 0);
+    g.rotateZ(-Math.cos(a) * .35);
+  };
+  function wingPair(parent, x, build) {
+    return [-1, 1].map(sg => { const pv = new THREE.Group(); pv.position.x = sg * x; build(pv, sg); parent.add(pv); return { pv, sg }; });
+  }
+  function bird(o) {
+    const g = new THREE.Group();
+    part(g, blobGeo, MAT[o.body], [.2 * o.s, .17 * o.s, .55 * o.s], [0, 0, 0]);
+    part(g, boxGeo, MAT[o.neck], [.05 * o.s, .05 * o.s, .55 * o.s], [0, .03 * o.s, -.55 * o.s]);
+    part(g, blobGeo, MAT[o.head], [.07 * o.s, .06 * o.s, .1 * o.s], [0, .04 * o.s, -.86 * o.s]);
+    part(g, boxGeo, MAT[o.billM], [.022 * o.s, .022 * o.s, .22 * o.s], [0, .03 * o.s, -1.02 * o.s]);
+    if (o.crown) part(g, blobGeo, MAT.shu, [.04 * o.s, .025 * o.s, .045 * o.s], [0, .095 * o.s, -.86 * o.s]);
+    if (o.legs) [-1, 1].forEach(sg => part(g, boxGeo, MAT[o.legs], [.03 * o.s, .03 * o.s, .5 * o.s], [sg * .04 * o.s, -.03 * o.s, .62 * o.s]));
+    if (o.bustle) part(g, blobGeo, MAT.ink, [.12 * o.s, .08 * o.s, .2 * o.s], [0, .03 * o.s, .36 * o.s]);
+    // arm (inner wing) + hand swept back + fanned primaries, so the silhouette reads as a bird, not a cross
+    const S = o.s * o.span, C = o.chord * o.s, hands = [];
+    const wings = wingPair(g, .1 * o.s, (pv, sg) => {
+      part(pv, boxGeo, MAT[o.wing], [.5 * S, .025 * o.s, C], [sg * .25 * S, 0, 0]);
+      if (o.trail) part(pv, boxGeo, MAT.ink, [.48 * S, .027 * o.s, C * .36], [sg * .25 * S, 0, C * .38]);
+      const hand = new THREE.Group(); hand.position.set(sg * .48 * S, 0, 0); hand.rotation.y = -sg * .35; pv.add(hand);
+      part(hand, boxGeo, MAT[o.wing], [.36 * S, .024 * o.s, C * .78], [sg * .18 * S, 0, 0]);
+      for (let j = 0; j < 4; j++) {
+        part(hand, boxGeo, MAT[o.tips || o.wing], [.3 * S, .02 * o.s, C * .16], [sg * .46 * S, 0, (j - 1.5) * C * .19], [0, -sg * (j * .13 - .12), 0]);
+      }
+      hands.push({ hand, sg });
+    });
+    return { g, flap(t, rate, amp) {
+      const a = Math.sin(t * rate) * amp + .08;
+      wings.forEach(w => { w.pv.rotation.z = w.sg * a; });
+      hands.forEach(h => { h.hand.rotation.z = h.sg * a * .7; });
+    } };
+  }
+  const FLYERS = {
+    plane: (() => {
+      const g = new THREE.Group();
+      [[.16, .13, 1.05, 0, 0, 0], [1.3, .035, .26, 0, 0, -.05], [.5, .03, .14, 0, 0, .44], [.03, .22, .16, 0, .1, .45]].forEach(([sx, sy, sz, x, y, z]) => part(g, boxGeo, MAT.white, [sx, sy, sz], [x, y, z]));
+      g.scale.setScalar(1.6);
+      return { g, update(lt) { sway(g, lt, 7); } };
+    })(),
+    biplane: (() => {
+      const g = new THREE.Group();
+      part(g, boxGeo, MAT.shu, [.18, .16, 1], [0, 0, 0]);
+      part(g, boxGeo, MAT.cream, [1.6, .035, .3], [0, .2, -.12]);
+      part(g, boxGeo, MAT.cream, [1.4, .03, .26], [0, -.06, -.12]);
+      part(g, boxGeo, MAT.cream, [.55, .03, .15], [0, 0, .45]);
+      part(g, boxGeo, MAT.shu, [.03, .2, .16], [0, .1, .45]);
+      const prop = new THREE.Group(); prop.position.set(0, 0, -.53); part(prop, boxGeo, MAT.ink, [.55, .02, .04], [0, 0, 0]); g.add(prop);
+      g.scale.setScalar(1.6);
+      return { g, update(lt) { sway(g, lt, 6.5); prop.rotation.z = lt * 40; } };
+    })(),
+    jet: (() => {
+      const g = new THREE.Group();
+      part(g, boxGeo, MAT.white, [.2, .18, 2], [0, 0, 0]);
+      [-1, 1].forEach(sg => {
+        part(g, boxGeo, MAT.white, [1.1, .04, .42], [sg * .52, -.02, .08], [0, sg * .55, 0]);
+        part(g, boxGeo, MAT.white, [.45, .03, .18], [sg * .22, 0, .86], [0, sg * .6, 0]);
+        part(g, boxGeo, MAT.grey, [.13, .13, .36], [sg * .45, -.1, -.08]);
+      });
+      part(g, boxGeo, MAT.shu, [.03, .32, .3], [0, .16, .9]);
+      g.scale.setScalar(1.4);
+      return { g, update(lt) { sway(g, lt, 8.5, 2); } };
+    })(),
+    crane: (() => {
+      const b = bird({ s: 1, body: 'white', neck: 'ink', head: 'white', billM: 'bill', crown: true, legs: 'ink', bustle: true, wing: 'white', span: 1.05, chord: .42, tips: null, trail: true });
+      b.g.scale.setScalar(1.5);
+      return { g: b.g, update(lt) { sway(b.g, lt, 5.5); b.g.position.y += Math.sin(lt * 4.2 - 1) * .12; b.flap(lt, 4.2, .5); } };
+    })(),
+    stork: (() => {
+      const b = bird({ s: 1, body: 'white', neck: 'white', head: 'white', billM: 'shu', crown: false, legs: 'shu', bustle: false, wing: 'white', span: 1.0, chord: .44, tips: 'ink', trail: true });
+      b.g.scale.setScalar(1.5);
+      return { g: b.g, update(lt) { sway(b.g, lt, 5.5); b.g.position.y += Math.sin(lt * 3.6 - 1) * .1; b.flap(lt, 3.6, .42); } };
+    })(),
+    geese: (() => {
+      const g = new THREE.Group(), flock = [];
+      for (let i = 0; i < 7; i++) {
+        const b = bird({ s: .55, body: 'goose', neck: 'ink', head: 'ink', billM: 'ink', crown: false, legs: null, bustle: false, wing: 'goose', span: 1, chord: .36, tips: 'gooseD', trail: false });
+        const k = Math.ceil(i / 2), sg = i % 2 ? -1 : 1;
+        b.g.position.set(sg * k * .8, 0, k * .7);
+        g.add(b.g); flock.push(b);
+      }
+      g.scale.setScalar(1.25);
+      return { g, update(lt) { sway(g, lt, 5, 2.2); flock.forEach((b, i) => { b.flap(lt + i * .31, 7, .55); b.g.position.y = Math.sin(lt * 1.3 + i) * .08; }); } };
+    })()
+  };
+  Object.values(FLYERS).forEach(f => { f.g.visible = false; scene.add(f.g); });
+  const AUTO_FLYER = { niigata: 'crane', pampa: 'biplane', serengeti: 'plane', punjab: 'geese', tuscany: 'plane', bruges: 'geese', provence: 'biplane', krumlov: 'stork' };
+  let flyerMode = ['auto'], flyer = FLYERS.plane;
+  function flyerFor(idx) {
+    const k = flyerMode[idx % flyerMode.length];
+    return k === 'auto' || !FLYERS[k] ? AUTO_FLYER[TL.order[idx % TL.order.length]] : k;
+  }
 
   // ================= the sheet: paper, frame, cartouches, seal =================
   let OW = 1280, OH = 720, rect = { x: 0, y: 0, w: 0, h: 0 };
@@ -618,7 +1005,7 @@
       c.fillStyle = '#2a2623';
       c.font = `700 ${Math.round(36 * u)}px "Noto Serif SC", "Songti SC", "STSong", serif`;
       vtext(c, '空中名所', x0 + tw / 2, y0 + 26 * u, 36 * u, 22 * u);
-      const w2 = 104 * u, h2_ = 250 * u, x1 = x0 - 14 * u - w2;
+      const w2 = 104 * u, h2_ = Math.max(250 * u, 44 * u + [...b.zh].length * 48 * u), x1 = x0 - 14 * u - w2;
       cartouche(c, x1, y0, w2, h2_, '#eadba6');
       c.fillStyle = '#2a2623';
       c.font = `700 ${Math.round(40 * u)}px "Noto Serif SC", "Songti SC", "STSong", serif`;
@@ -629,7 +1016,10 @@
       c.textAlign = 'right'; c.fillStyle = 'rgba(42,38,35,.8)';
       c.fillText(coords, rect.x + rect.w - pad, rect.y + rect.h - pad);
     } else {
-      const pad = 30 * u, w = 360 * u, h = 112 * u, x0 = rect.x + rect.w - pad - w, y0 = rect.y + pad;
+      c.font = `600 ${Math.round(34 * u)}px "Cormorant Garamond", Georgia, serif`;
+      const nameW = c.measureText(b.en).width;
+      c.font = `italic 500 ${Math.round(21 * u)}px "Cormorant Garamond", Georgia, serif`;
+      const pad = 30 * u, w = Math.max(360 * u, nameW + 70 * u, c.measureText(b.enSeason).width + 70 * u), h = 112 * u, x0 = rect.x + rect.w - pad - w, y0 = rect.y + pad;
       cartouche(c, x0, y0, w, h, '#eadba6');
       c.fillStyle = '#2a2623';
       c.font = `600 ${Math.round(34 * u)}px "Cormorant Garamond", Georgia, serif`;
@@ -668,7 +1058,10 @@
     groundMat.uniforms.uS.value = sd.S;
     groundMat.uniforms.uPh.value = sd.ph;
     camZ = 0;
+    townCache.clear();
     clearChunks();
+    flyer = FLYERS[flyerFor(idx)];
+    Object.values(FLYERS).forEach(f => { f.g.visible = f === flyer; });
     syncChunks(camZ);
     cloudRng = rng(seed * 31 + 7);
     clouds.forEach((c, i) => placeCloud(c, 20 - i * (44 / Math.max(1, biome.clouds)) - cloudRng() * 4, i < biome.clouds));
@@ -686,12 +1079,14 @@
     camZ = -SPEED * lt;
     syncChunks(camZ);
     for (const c of chunks.values()) {
+      c.spins.forEach((g, i) => { g.rotation.z = lt * (1.1 + i * .13); });
       if (!c.animals) continue;
       const { mesh, list } = c.animals;
       list.forEach((a, i) => {
         a.h += Math.sin(lt * .7 + a.tw) * .25 * dt;
         const nx = a.x + Math.sin(a.h) * a.v * dt, nz = a.z - Math.cos(a.h) * a.v * dt;
-        if (biome.isWater(nx, nz, sd) || Math.abs(nx) > W / 2 - 1 || Math.abs(nz - c.zc) > L / 2 - 1) a.h += Math.PI * .5;
+        const wet = biome.isWater(nx, nz, sd);
+        if ((a.aq ? !wet : wet) || Math.abs(nx) > W / 2 - 1 || Math.abs(nz - c.zc) > L / 2 - 1) a.h += Math.PI * .5;
         else { a.x = nx; a.z = nz; }
         const s = a.s;
         dummy.position.set(a.x, .1 * s, a.z); dummy.rotation.set(0, -a.h, 0); dummy.scale.set(.24 * s, .2 * s, .55 * s);
@@ -709,10 +1104,7 @@
     sun.target.position.set(0, 0, camZ);
     sun.position.copy(sun.target.position).addScaledVector(SUN_DIR, 80);
     ground.position.z = camZ; shadowPlane.position.z = camZ;
-    const sw = lt * .21;
-    plane.position.set(Math.sin(sw) * 3, 7, camZ + 1.5);
-    plane.rotation.set(0, -Math.cos(sw) * .12, 0);
-    plane.rotateZ(-Math.cos(sw) * .35);
+    flyer.update(lt);
     renderer.render(scene, camera);
     composite(veilAt(lt));
   }
@@ -732,7 +1124,7 @@
 
   async function loadFonts() {
     const want = ['700 40px "Noto Serif SC"', '600 30px "Cormorant Garamond"', 'italic 500 20px "Cormorant Garamond"'];
-    const text = '空中名所新潟潘帕斯塞伦盖蒂旁遮普春樱花映水田草原新绿旱季长草冬末芥菜花开·';
+    const text = '空中名所新潟潘帕斯塞伦盖蒂旁遮普春樱花映水田草原新绿旱季长草冬末芥菜花开托斯卡纳初夏麦与柏树布鲁日秋运河砖顶普罗旺盛薰衣克姆洛夫湾古城·';
     try { await Promise.race([Promise.all(want.map(f => document.fonts.load(f, text))), new Promise(r => setTimeout(r, 5000))]); } catch (e) { /* fall back to system faces */ }
   }
 
@@ -744,6 +1136,7 @@
       await loadFonts();
       fps = o.fps || 30;
       labelsMode = o.labels || 'zh';
+      flyerMode = o.flyer && o.flyer.length ? o.flyer : ['auto'];
       const order = (o.scenes && o.scenes.length ? o.scenes : ORDER_DEFAULT).filter(k => BIOMES[k]);
       const n = Math.max(1, Math.round(o.duration / (o.segment || 45)));
       TL = { order, seg: o.duration / n, fade: Math.min(1.5, o.duration / n * .15), seed0: o.seed || 1 };
@@ -762,7 +1155,7 @@
     const b = document.createElement('button'); b.type = 'button'; b.textContent = BIOMES[k].en.split(',')[0];
     b.addEventListener('click', () => {
       const cur = Math.floor(t / TL.seg), target = ORDER_DEFAULT.indexOf(k);
-      let idx = cur + 1; while (idx % 4 !== target) idx++;
+      let idx = cur + 1; while (idx % ORDER_DEFAULT.length !== target) idx++;
       t = idx * TL.seg;
     });
     scenesEl.appendChild(b); return b;
@@ -773,6 +1166,18 @@
     labelsEl.appendChild(b); return b;
   });
   labelBtns[0].setAttribute('aria-pressed', 'true');
+  const flyersEl = document.getElementById('flyers');
+  const flyerBtns = [['auto', 'Auto'], ['plane', 'Plane'], ['biplane', 'Biplane'], ['jet', 'Jet'], ['crane', 'Crane'], ['stork', 'Stork'], ['geese', 'Geese']].map(([k, txt]) => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = txt;
+    b.addEventListener('click', () => {
+      flyerMode = [k];
+      flyer = FLYERS[flyerFor(curIdx)];
+      Object.values(FLYERS).forEach(f => { f.g.visible = f === flyer; });
+      flyerBtns.forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    });
+    flyersEl.appendChild(b); return b;
+  });
+  flyerBtns[0].setAttribute('aria-pressed', 'true');
   let paused = false;
   const pauseBtn = document.getElementById('pause');
   pauseBtn.addEventListener('click', () => { paused = !paused; pauseBtn.setAttribute('aria-pressed', String(paused)); pauseBtn.textContent = paused ? 'Resume' : 'Pause'; });
