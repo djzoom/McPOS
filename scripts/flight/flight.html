@@ -1,0 +1,796 @@
+<title>Low Flight Atlas</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@700&family=Cormorant+Garamond:ital,wght@0,600;1,500&family=Instrument+Sans:wght@400;600&family=JetBrains+Mono&display=swap">
+<style>
+  /* Layout: the print is the page. One 16:9 sheet on a dark wooden table, controls and render recipe below it. */
+  :root {
+    --table: #2a2622;
+    --table-2: #34302b;
+    --washi: #f2e8d2;
+    --ink: #2a2623;
+    --text: #efe6d4;
+    --text-soft: #b3a892;
+    --shu: #c8462c;
+    --sans: "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+    color-scheme: dark;
+  }
+  html, body { background: var(--table); color: var(--text); }
+  body {
+    font-family: var(--sans);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 24px 40px;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+  h1 { font-family: "Noto Serif SC", "Songti SC", serif; font-weight: 700; font-size: 1.5rem; margin: 0; letter-spacing: .12em; }
+  header p { margin: 0; color: var(--text-soft); font-size: .86rem; }
+  #out { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; max-width: 100%; background: var(--washi); border-radius: 3px; box-shadow: 0 18px 50px rgba(0, 0, 0, .45); }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .group { display: flex; flex-wrap: wrap; gap: 6px; }
+  .spacer { flex: 1 1 auto; }
+  button {
+    font: inherit; font-size: .8rem; color: var(--text); background: var(--table-2);
+    border: 1px solid rgba(239, 230, 212, .14); border-radius: 999px; padding: 7px 13px; cursor: pointer;
+  }
+  button:hover { border-color: rgba(239, 230, 212, .35); }
+  button:focus-visible { outline: 2px solid var(--shu); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--washi); color: var(--ink); border-color: var(--washi); }
+  .recipe { display: flex; flex-direction: column; gap: 8px; }
+  .recipe h2 { font-size: .8rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-soft); margin: 8px 0 0; }
+  pre { margin: 0; overflow-x: auto; background: var(--table-2); border-radius: 6px; padding: 12px 14px; font-family: var(--mono); font-size: .74rem; line-height: 1.6; color: var(--text); }
+  .note { font-size: .78rem; color: var(--text-soft); line-height: 1.6; margin: 0; max-width: 72ch; }
+  body.render { padding: 0; background: #000; }
+  body.render .wrap > :not(#out) { display: none; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>空中名所</h1>
+    <p>Low Flight Atlas · a small plane over four landscapes, cut as a colour woodblock print.</p>
+  </header>
+
+  <canvas id="out" width="1280" height="720" aria-label="Animated woodblock-print landscape seen from a plane"></canvas>
+
+  <div class="controls">
+    <div class="group" id="scenes" role="group" aria-label="Landscape"></div>
+    <span class="spacer"></span>
+    <div class="group" id="labels" role="group" aria-label="Cartouche language"></div>
+    <button id="pause" type="button" aria-pressed="false">Pause</button>
+  </div>
+
+  <section class="recipe">
+    <h2>Render a video</h2>
+    <pre>./.venv/bin/python scripts/flight/render_flight.py --res 4k --duration 10m --out ~/Desktop/flight_4k.mp4
+./.venv/bin/python scripts/flight/render_flight.py --res 256 --duration 30 --out /tmp/flight_tiny.mp4
+./.venv/bin/python scripts/flight/render_flight.py --res 1080p --duration 3h --unique 20m --labels none --out flight_3h.mp4</pre>
+    <p class="note">Every frame is rendered deterministically from the seed, so the same command gives the same film. The ink lines, wood grain and paper are measured in world units, so 256 px and 4K share one composition. Each scene opens and closes on blank paper, which lets <code>--unique</code> loop a shorter render seamlessly to fill hours.</p>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+  // ================= deterministic noise (bit-identical to the GLSL copy) =================
+  const OFF = 1048576;
+  function h2(x, y, s) {
+    let h = Math.imul((x + OFF) | 0, 374761393) ^ Math.imul((y + OFF) | 0, 668265263) ^ Math.imul(s | 0, 2246822519);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  }
+  function vnoise(x, y, s) {
+    const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+    const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    const a = h2(xi, yi, s), b = h2(xi + 1, yi, s), c = h2(xi, yi + 1, s), d = h2(xi + 1, yi + 1, s);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  }
+  function rng(seed) {
+    let a = seed >>> 0;
+    return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  const pick = (r, arr) => arr[Math.floor(r() * arr.length)];
+  const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+  // ================= landscapes: placement + water tests (ground colours live in GLSL) =================
+  const W = 64, L = 48;
+  const BIOMES = {
+    niigata: {
+      id: 0, clouds: 3, zh: '新潟', zhSeason: '春 · 樱花映水田', en: 'Niigata, Japan', enSeason: 'Spring · sakura over flooded paddies', lat: 37.916, lon: 139.036,
+      riverX: (z, ph) => 5 + 2.5 * Math.sin(z * .025 + ph) + 1.2 * Math.sin(z * .061 + ph * 2),
+      isWater(x, z, sd) { return Math.abs(x - this.riverX(z, sd.ph)) < 3.3; },
+      populate(zc, r, add, sd) {
+        const sak = [0xf2b8b0, 0xf6cfc6, 0xe99c98, 0xfbe3dc];
+        const tree = (x, z) => {
+          if (this.isWater(x, z, sd)) return;
+          const n = 3 + Math.floor(r() * 3);
+          for (let i = 0; i < n; i++) { const s = .45 + r() * .45; add.blob(x + (r() - .5) * 1.1, .7 + r() * .5, z + (r() - .5) * 1.1, s, s * .8, s, pick(r, sak)); }
+        };
+        for (let i = 0; i < 7; i++) tree(-9 + (r() < .5 ? -1.5 : 1.5), zc + (r() - .5) * L);
+        for (let i = 0; i < 7; i++) { const z = zc + (r() - .5) * L; tree(this.riverX(z, sd.ph) + (r() < .5 ? -4 : 4), z); }
+        for (let i = 0; i < 5; i++) tree((r() - .5) * W, zc + (r() - .5) * L);
+        for (let i = 0; i < 18; i++) { const x = (r() - .5) * W, z = zc + (r() - .5) * L; if (!this.isWater(x, z, sd)) add.animal(x, z, 0xffffff, .5, r() * 6.28, .06); }
+        const rz = Math.round(zc / 40) * 40;
+        if (Math.abs(rz - zc) < L / 2) {
+          const rx = this.riverX(rz, sd.ph);
+          add.box(rx, .35, rz, 6.4, .22, 1.1, 0, 0xc8462c);
+          add.box(rx, .58, rz - .52, 6.4, .14, .1, 0, 0x2a2623);
+          add.box(rx, .58, rz + .52, 6.4, .14, .1, 0, 0x2a2623);
+        }
+      }
+    },
+    pampa: {
+      id: 1, clouds: 2, zh: '潘帕斯', zhSeason: '春 · 草原新绿', en: 'La Pampa, Argentina', enSeason: 'Spring · open grassland', lat: -36.620, lon: -64.290,
+      roadX: (z, ph) => -1 + 3 * Math.sin(z * .012 + ph),
+      riverX: (z, ph) => -13 + 2 * Math.sin(z * .03 + ph),
+      isWater(x, z, sd) { return Math.abs(x - this.riverX(z, sd.ph)) < 2; },
+      populate(zc, r, add, sd) {
+        const herds = 2 + Math.floor(r() * 3);
+        for (let h = 0; h < herds; h++) {
+          const hx = (r() - .5) * (W - 10), hz = zc + (r() - .5) * (L - 8), dir = r() * 6.28, n = 4 + Math.floor(r() * 9);
+          for (let i = 0; i < n; i++) { const x = hx + (r() - .5) * 5, z = hz + (r() - .5) * 5; if (!this.isWater(x, z, sd)) add.animal(x, z, pick(r, [0x2e2a28, 0x7a4a2e, 0x2e2a28, 0xece2cf]), 1, dir + (r() - .5), .12); }
+        }
+        if (r() < .6) {
+          const z = zc + (r() - .5) * 30, x = this.roadX(z, sd.ph) + 2.4;
+          add.box(x, .3, z, .9, .6, 1.5, 0, 0xe2d2ae); add.box(x, .68, z, 1.05, .16, 1.65, 0, 0x8a4a36);
+          add.box(x + 1.3, .2, z + .6, .7, .4, .7, 0, 0xd6c8a8);
+          for (let i = 0; i < 5; i++) { const s = .5 + r() * .5; add.blob(x + 2 + r() * 2, .6, z - 1 + r() * 3, s, s * .8, s, pick(r, [0x4d7244, 0x5d7f4a])); }
+        }
+        for (let i = 0; i < 3; i++) { const x = (r() - .5) * W, z = zc + (r() - .5) * L; if (!this.isWater(x, z, sd)) { const s = .6 + r() * .4; add.blob(x, .6, z, s, s * .8, s, 0x4d7244); } }
+      }
+    },
+    serengeti: {
+      id: 2, clouds: 4, zh: '塞伦盖蒂', zhSeason: '旱季 · 长草', en: 'Serengeti, Tanzania', enSeason: 'Dry season · long grass', lat: -2.333, lon: 34.833,
+      riverX: (z, ph) => 2 + 2 * Math.sin(z * .018 + 1 + ph),
+      pond(x, z, sd) { return vnoise(x * .09 + 50, z * .09, 77 + sd.S) * sstep(6, 8, Math.abs(x - this.riverX(z, sd.ph))); },
+      isWater(x, z, sd) { return Math.abs(x - this.riverX(z, sd.ph)) < 2.2 || this.pond(x, z, sd) > .73; },
+      populate(zc, r, add, sd) {
+        const herds = 4 + Math.floor(r() * 3), cols = [0x3b322b, 0x2e2a28, 0x4a3a2e];
+        for (let h = 0; h < herds; h++) {
+          const hx = (r() - .5) * (W - 6), hz = zc + (r() - .5) * (L - 6), dir = r() * 6.28, n = 12 + Math.floor(r() * 26), spread = 5 + r() * 7;
+          for (let i = 0; i < n; i++) { const x = hx + (r() - .5) * spread, z = hz + (r() - .5) * spread * 1.4; if (!this.isWater(x, z, sd)) add.animal(x, z, pick(r, cols), .85, dir + (r() - .5) * .6, .18); }
+        }
+        for (let i = 0; i < 5; i++) {
+          const x = (r() - .5) * W, z = zc + (r() - .5) * L; if (this.isWater(x, z, sd)) continue;
+          const s = .9 + r() * .7; add.blob(x, 1.2, z, s * 1.4, s * .35, s * 1.2, pick(r, [0x5f7a3a, 0x4d6a34]));
+        }
+        for (let tries = 0, got = 0; tries < 200 && got < 2; tries++) {
+          const x = (r() - .5) * W, z = zc + (r() - .5) * L, p = this.pond(x, z, sd);
+          if (p > .69 && p < .72) { got++; for (let i = 0; i < 4; i++) { const s = .7 + r() * .5; add.blob(x + (r() - .5) * 1.4, .9, z + (r() - .5) * 1.4, s, s * .85, s, pick(r, [0x3f6238, 0x4d7244])); } }
+        }
+      }
+    },
+    punjab: {
+      id: 3, clouds: 3, zh: '旁遮普', zhSeason: '冬末 · 芥菜花开', en: 'Punjab, India', enSeason: 'Late winter · mustard in flower', lat: 30.901, lon: 75.857,
+      isWater(x) { return Math.abs(x - 9) < 2.1; },
+      populate(zc, r, add, sd) {
+        const groves = 1 + Math.floor(r() * 3);
+        for (let g = 0; g < groves; g++) {
+          const gx = -4 + (r() - .5) * 24, gz = zc + (r() - .5) * 34, n = 7 + Math.floor(r() * 7);
+          if (this.isWater(gx)) continue;
+          for (let i = 0; i < n; i++) { const s = .55 + r() * .5; add.blob(gx + (r() - .5) * 4, .75, gz + (r() - .5) * 5, s, s * .85, s, pick(r, [0x3f6238, 0x4d7244, 0x34552f])); }
+          if (r() < .7) { const hx = gx - 3.2, hz = gz + 1; add.box(hx, .3, hz, .8, .6, 1.1, .2, 0xc9492f); add.box(hx, .66, hz, .9, .12, 1.2, .2, 0x3a3432); }
+        }
+        for (let i = 0; i < 10; i++) { const x = (r() - .5) * (W - 14) - 3, z = zc + (r() - .5) * L; if (!this.isWater(x)) add.animal(x, z, pick(r, [0x2e2a28, 0x3b322b, 0x6b5440]), .95, r() * 6.28, .07); }
+      }
+    }
+  };
+  const ORDER_DEFAULT = ['niigata', 'pampa', 'serengeti', 'punjab'];
+
+  // ================= ground shader: the colour blocks and the key block =================
+  const GROUND_FS = `
+  uniform int uBiome; uniform float uS; uniform float uPh; uniform float uUPP;
+  varying vec3 vW;
+  const float OFF = 1048576.0;
+  const vec3 INK = vec3(.165,.149,.137);
+  const vec3 INDIGO_D = vec3(.118,.216,.345), INDIGO = vec3(.196,.369,.553), INDIGO_L = vec3(.506,.639,.769);
+  const vec3 AI_L = vec3(.663,.780,.839), AI_M = vec3(.553,.698,.800);
+  const vec3 SAGE = vec3(.561,.643,.353), SAGE_L = vec3(.710,.753,.494), GREEN = vec3(.427,.561,.306), GREEN_D = vec3(.302,.447,.267);
+  const vec3 OCHRE_D = vec3(.725,.518,.212), OCHRE = vec3(.847,.635,.290), OCHRE_L = vec3(.914,.761,.478);
+  const vec3 GAMB = vec3(.929,.784,.294), GAMB_L = vec3(.953,.847,.471), GAMB_D = vec3(.886,.706,.227), GAMB_P = vec3(.949,.875,.557);
+  const vec3 EARTH = vec3(.608,.463,.314), EARTH_L = vec3(.792,.667,.494), STONE = vec3(.812,.776,.678), STONE_L = vec3(.878,.851,.769);
+  const vec3 TEAL = vec3(.247,.498,.525), TEAL_D = vec3(.173,.369,.400), RED_EARTH = vec3(.706,.345,.227);
+
+  float h2(float x, float y, float s) {
+    uint h = (uint(x + OFF) * 374761393u) ^ (uint(y + OFF) * 668265263u) ^ (uint(s) * 2246822519u);
+    h = (h ^ (h >> 13u)) * 1274126177u; h ^= h >> 16u;
+    return float(h) / 4294967296.0;
+  }
+  float vnoise(float x, float y, float s) {
+    float xi = floor(x), yi = floor(y), xf = x - xi, yf = y - yi;
+    float u = xf*xf*(3.-2.*xf), v = yf*yf*(3.-2.*yf);
+    float a = h2(xi,yi,s), b = h2(xi+1.,yi,s), c = h2(xi,yi+1.,s), d = h2(xi+1.,yi+1.,s);
+    return a + (b-a)*u + (c-a)*v + (a-b-c+d)*u*v;
+  }
+  float fbm(float x, float y, float s, int o) {
+    float sum = 0., amp = .5, f = 1., n = 0.;
+    for (int i = 0; i < 4; i++) { if (i >= o) break; sum += amp*vnoise(x*f, y*f, s + float(i)*17.); n += amp; amp *= .5; f *= 2.03; }
+    return sum / n;
+  }
+  // coverage of a signed distance (world units, <0 inside), antialiased over one pixel
+  float cover(float sd) { return 1. - smoothstep(-uUPP*.7, uUPP*.7, sd); }
+  // carved line of world width w around a boundary at unsigned distance d; width wobbles like a knife
+  float carve(float d, float w, vec2 p) { return cover(d - w * (.7 + .6*vnoise(p.x*.8, p.y*.8, 5.))); }
+  // world distance to an iso-line of a noise field
+  float isoD(float n, float th) { return abs(n - th) * uUPP / max(fwidth(n), 1e-6); }
+  float aastep(float th, float n) { return clamp((n - th) / max(fwidth(n), 1e-6) + .5, 0., 1.); }
+  // fade detail whose wavelength nears a pixel, so 256 px stays calm and 4K stays rich
+  float lod(float wavelength) { return smoothstep(1.7, 4., wavelength / uUPP); }
+  // short knife strokes scattered on a grid
+  float strokes(vec2 p, float cell, float len, float w, float prob, float s, float ang0, float angJ) {
+    vec2 g = floor(p / cell);
+    if (h2(g.x, g.y, s) > prob) return 0.;
+    vec2 c = (g + .3 + .4*vec2(h2(g.x, g.y, s+1.), h2(g.x, g.y, s+2.))) * cell;
+    float a = ang0 + (h2(g.x, g.y, s+3.) - .5) * angJ;
+    vec2 dir = vec2(sin(a), cos(a));
+    vec2 q = p - c; float t = clamp(dot(q, dir), -len*.5, len*.5);
+    return cover(length(q - dir*t) - w);
+  }
+  float ripples(vec2 p, float k) {
+    float q = (p.y + .35*sin(p.x*1.7 + p.y*.15)) * k;
+    float d = abs(fract(q) - .5) / k;
+    return cover(d - .03) * step(.45, vnoise(p.x*1.3, p.y*.6, 9.)) * lod(1./k);
+  }
+
+  vec3 niigata(vec2 p, inout float ink) {
+    float x = p.x, z = p.y, S = uS;
+    float rx = 5. + 2.5*sin(z*.025 + uPh) + 1.2*sin(z*.061 + uPh*2.);
+    float dr = abs(x - rx);
+    float cw = 2.6, X = (x + 200.)/cw, ci = floor(X), fx = X - ci;
+    float ch = 6. + h2(ci, 3., 1.+S)*3., oz = h2(ci, 5., 2.+S)*ch, Z = (z + oz)/ch, ri = floor(Z), fz = Z - ri;
+    float r = h2(ci, ri, 7.+S);
+    vec3 col;
+    if (r < .72) {
+      float k = floor(r / .72 * 4.);
+      col = k < 1. ? AI_L : k < 2. ? INDIGO_L : k < 3. ? AI_M : mix(AI_L, SAGE_L, .45);
+      col = mix(col, vec3(1.), .45 * (1. - fz));            // bokashi wiped across each flooded paddy
+    } else col = r < .92 ? (r < .84 ? SAGE : SAGE_L) : EARTH;
+    float d = min(min(fx, 1.-fx)*cw, min(fz, 1.-fz)*ch);
+    col = mix(col, SAGE_L, cover(d - .09));
+    ink = max(ink, carve(abs(d - .09), .02, p) * .9);
+    float rz = floor(z/40. + .5)*40.;
+    float dRoad = min(abs(x + 9.), abs(z - rz));
+    col = mix(col, EARTH_L, cover(dRoad - .45));
+    ink = max(ink, carve(abs(dRoad - .45), .035, p));
+    float onLand = 1. - cover(dr - 3.2);
+    ink *= onLand;
+    col = mix(col, SAGE, cover(dr - 3.2));
+    col = mix(col, STONE, cover(dr - 2.7));
+    col = mix(col, mix(INDIGO_D, INDIGO, smoothstep(0., 2.2, dr)), cover(dr - 2.2));
+    col = mix(col, INDIGO_L, ripples(p, 1.1) * cover(dr - 2.)) ;
+    ink = max(ink, carve(abs(dr - 2.2), .04, p));
+    ink = max(ink, carve(abs(dr - 3.2), .035, p));
+    ink = max(ink, carve(abs(dr - 2.7), .018, p) * .8);
+    return col;
+  }
+
+  vec3 pampa(vec2 p, inout float ink) {
+    float x = p.x, z = p.y, S = uS;
+    float n = fbm(x*.05, z*.05, 11.+S, 4);
+    vec3 col = mix(GREEN, SAGE, aastep(.45, n));
+    col = mix(col, SAGE_L, aastep(.57, n));
+    col = mix(col, GREEN_D, strokes(p, .9, .35, .03, .35, 61.+S, 0., .9) * lod(.9) * .8);
+    float rdx = -1. + 3.*sin(z*.012 + uPh), rd = abs(x - rdx);
+    col = mix(col, EARTH_L, cover(rd - .55));
+    col = mix(col, EARTH, cover(abs(rd - .22) - .05));
+    ink = max(ink, carve(abs(rd - .55), .035, p));
+    float rvx = -13. + 2.*sin(z*.03 + uPh), dv = abs(x - rvx);
+    ink *= 1. - cover(dv - 1.9);
+    col = mix(col, STONE, cover(dv - 1.9));
+    col = mix(col, mix(INDIGO_D, INDIGO, smoothstep(0., 1.4, dv)), cover(dv - 1.4));
+    col = mix(col, INDIGO_L, ripples(p, 1.3) * cover(dv - 1.2));
+    ink = max(ink, carve(abs(dv - 1.4), .04, p));
+    ink = max(ink, carve(abs(dv - 1.9), .03, p));
+    return col;
+  }
+
+  vec3 serengeti(vec2 p, inout float ink) {
+    float x = p.x, z = p.y, S = uS;
+    float n = fbm(x*.06, z*.06, 21.+S, 4), sh = fbm(x*.03 + 9., z*.03, 41.+S, 3);
+    vec3 col = mix(OCHRE_D, OCHRE, aastep(.43, n));
+    col = mix(col, OCHRE_L, aastep(.57, n));
+    col = mix(col, OCHRE_D, aastep(.6, sh) * .55);
+    float g1 = strokes(p, .55, .32, .022, .55, 71.+S, 0., .6);
+    float g2 = strokes(p + vec2(.27, .19), .55, .26, .02, .35, 72.+S, .3, .6);
+    col = mix(col, vec3(.557,.384,.196), max(g1, g2*.8) * lod(.55) * .7);
+    float tx = -8. + 1.5*sin(z*.02 + uPh), dt = abs(x - tx);
+    col = mix(col, RED_EARTH, cover(dt - .3));
+    ink = max(ink, carve(abs(dt - .3), .03, p));
+    float rx = 2. + 2.*sin(z*.018 + 1. + uPh), dr = abs(x - rx);
+    float pn = vnoise(x*.09 + 50., z*.09, 77.+S) * smoothstep(6., 8., dr);
+    float pd1 = isoD(pn, .79), pd2 = isoD(pn, .74);
+    col = mix(col, SAGE, aastep(.74, pn));
+    col = mix(col, mix(TEAL, TEAL_D, smoothstep(.79, .9, pn)), aastep(.79, pn));
+    ink *= 1. - aastep(.74, pn) * (1. - cover(pd2 - .2));
+    ink = max(ink, carve(pd1, .035, p));
+    ink = max(ink, carve(pd2, .025, p));
+    ink *= 1. - cover(dr - 2.1);
+    col = mix(col, SAGE, cover(dr - 2.1));
+    col = mix(col, TEAL_D, cover(dr - 1.65));
+    col = mix(col, mix(TEAL_D, TEAL, smoothstep(0., 1.3, dr)), cover(dr - 1.3));
+    col = mix(col, mix(TEAL, AI_L, .5), ripples(p, 1.4) * cover(dr - 1.1));
+    ink = max(ink, carve(abs(dr - 1.65), .035, p));
+    ink = max(ink, carve(abs(dr - 2.1), .03, p));
+    return col;
+  }
+
+  vec3 punjab(vec2 p, inout float ink) {
+    float x = p.x, z = p.y, S = uS;
+    float wx = x + (vnoise(x*.05, z*.05, 3.+S) - .5)*14., wz = z + (vnoise(x*.05 + 7., z*.05, 4.+S) - .5)*14.;
+    float g = fbm(wx*.035, wz*.035, 51.+S, 3);
+    float gd = isoD(g, .6);
+    float px = (x + 200.)/7., pz = (z + 2000.)/10., ix = floor(px), iz = floor(pz);
+    float hk = h2(ix, iz, 13.+S);
+    vec3 col = hk < .3 ? GAMB : hk < .55 ? GAMB_L : hk < .8 ? GAMB_D : GAMB_P;
+    col *= 1. - .06*step(.5, fract(x*2.2 + .3*sin(z*.2))) * lod(.45);
+    float pdist = min(min(px - ix, 1. - px + ix)*7., min(pz - iz, 1. - pz + iz)*10.);
+    ink = max(ink, carve(pdist, .02, p) * .85);
+    float gm = aastep(.6, g);
+    col = mix(col, mix(GREEN, GREEN_D, step(.55, vnoise(x*.4, z*.4, 8.)) * .4), gm);
+    ink *= 1. - gm * (1. - cover(gd - .1));
+    ink = max(ink, carve(gd, .035, p));
+    float rz = floor(z/30. + .5)*30.;
+    float dRoad = min(abs(x + 7.), x < 9. ? abs(z - rz) : 1e3);
+    col = mix(col, STONE_L, cover(dRoad - .45));
+    ink *= 1. - cover(dRoad - .4);
+    ink = max(ink, carve(abs(dRoad - .45), .03, p));
+    float dc = abs(x - 9.);
+    ink *= 1. - cover(dc - 2.);
+    col = mix(col, SAGE, cover(dc - 2.));
+    col = mix(col, STONE, cover(dc - 1.5));
+    col = mix(col, mix(INDIGO_D, INDIGO, smoothstep(0., 1.1, dc)), cover(dc - 1.1));
+    col = mix(col, INDIGO_L, ripples(p, 1.5) * cover(dc - .95));
+    ink = max(ink, carve(abs(dc - 1.1), .04, p));
+    ink = max(ink, carve(abs(dc - 1.5), .025, p));
+    ink = max(ink, carve(abs(dc - 2.), .03, p));
+    return col;
+  }
+
+  void main() {
+    vec2 p = vW.xz;
+    float ink = 0.;
+    vec3 col;
+    if (uBiome == 0) col = niigata(p, ink);
+    else if (uBiome == 1) col = pampa(p, ink);
+    else if (uBiome == 2) col = serengeti(p, ink);
+    else col = punjab(p, ink);
+    // printing: goma-zuri (pigment skipping), wood grain from the colour block, then the key block on top
+    float mott = vnoise(p.x*1.3, p.y*1.3, 300.)*.6 + vnoise(p.x*5., p.y*5., 301.)*.4*lod(.2);
+    col = mix(col, vec3(1.), smoothstep(.6, .95, mott) * .2);
+    float grain = vnoise(p.x*.35, p.y*8. + vnoise(p.x*.2, p.y*.2, 302.)*6., 303.);
+    col *= 1. - .06 * smoothstep(.55, .85, grain) * lod(.125);
+    float skip = smoothstep(.72, .9, vnoise(p.x*3., p.y*3., 304.)) * lod(.33);
+    col = mix(col, INK, ink * (1. - .35*skip));
+    gl_FragColor = vec4(col, 1.);
+  }`;
+  const GROUND_VS = `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`;
+
+  // ================= scene =================
+  const out = document.getElementById('out');
+  const octx = out.getContext('2d');
+  const glCanvas = document.createElement('canvas');
+  const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(1);
+  renderer.setClearColor(0xffffff, 1);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+
+  const scene = new THREE.Scene();
+  const FOV = 30, CAM_H = 56, VIEW_H = 2 * CAM_H * Math.tan(FOV / 2 * Math.PI / 180);
+  const camera = new THREE.PerspectiveCamera(FOV, 16 / 9, 1, 200);
+  camera.up.set(0, 0, -1);
+
+  scene.add(new THREE.AmbientLight(0xc4cde0, .58));
+  const sun = new THREE.DirectionalLight(0xfff1dc, .52);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera, { left: -48, right: 48, top: 48, bottom: -48, near: 1, far: 160 });
+  sun.shadow.bias = -.0006;
+  sun.shadow.normalBias = .02;
+  scene.add(sun, sun.target);
+  const SUN_DIR = new THREE.Vector3(-10, 30, -12).normalize();
+
+  const groundMat = new THREE.ShaderMaterial({
+    uniforms: { uBiome: { value: 0 }, uS: { value: 0 }, uPh: { value: 0 }, uUPP: { value: .03 } },
+    vertexShader: GROUND_VS, fragmentShader: GROUND_FS, extensions: { derivatives: true }
+  });
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 80), groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  scene.add(ground);
+
+  const shadowPlane = new THREE.Mesh(new THREE.PlaneGeometry(120, 80), new THREE.ShadowMaterial({ opacity: .2, color: 0x1e3757 }));
+  shadowPlane.rotation.x = -Math.PI / 2;
+  shadowPlane.position.y = .01;
+  shadowPlane.receiveShadow = true;
+  shadowPlane.renderOrder = 1;
+  scene.add(shadowPlane);
+
+  function gradient(lo) {
+    const t = new THREE.DataTexture(new Uint8Array([lo, lo, lo, 255, 255, 255, 255, 255]), 2, 1, THREE.RGBAFormat);
+    t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true;
+    return t;
+  }
+  const toon = new THREE.MeshToonMaterial({ gradientMap: gradient(90) });
+  const cloudMat = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: gradient(205) });
+  const hullMat = width => new THREE.ShaderMaterial({
+    uniforms: { uW: { value: width } },
+    vertexShader: `
+      uniform float uW;
+      void main() {
+        mat4 m = modelMatrix;
+        #ifdef USE_INSTANCING
+          m = m * instanceMatrix;
+        #endif
+        vec4 wp = m * vec4(position, 1.);
+        wp.xyz += normalize(mat3(m) * normalize(position)) * uW;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }`,
+    fragmentShader: `void main(){ gl_FragColor = vec4(.165, .149, .137, 1.); }`,
+    side: THREE.BackSide
+  });
+  const hullTree = hullMat(.06), hullCloud = hullMat(.09), hullPlane = hullMat(.025);
+
+  const blobGeo = new THREE.IcosahedronGeometry(1, 1);
+  const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+  const cloudGeo = new THREE.SphereGeometry(1, 20, 14);
+  const dummy = new THREE.Object3D();
+  const tmpColor = new THREE.Color();
+
+  // ---------- object chunks ----------
+  const chunks = new Map();
+  let biome = BIOMES.niigata, sd = { seed: 1, S: 131, ph: 1.7 };
+
+  function buildChunk(k) {
+    const zc = -k * L, blobs = [], boxes = [], animals = [];
+    const add = {
+      blob: (x, y, z, sx, sy, sz, c) => blobs.push({ x, y, z, sx, sy, sz, c }),
+      box: (x, y, z, sx, sy, sz, ry, c) => boxes.push({ x, y, z, sx, sy, sz, ry, c }),
+      animal: (x, z, c, s, h, v) => animals.push({ x, z, c, s, h, v, tw: 0 })
+    };
+    const r = rng(sd.seed * 7919 + k * 104729 + biome.id * 15485863 + 13);
+    biome.populate(zc, r, add, sd);
+    animals.forEach(a => { a.v *= .4 + r(); a.tw = r() * 10; });
+    const group = new THREE.Group();
+    const mk = (geo, list, hull) => {
+      if (!list.length) return null;
+      const m = new THREE.InstancedMesh(geo, toon, list.length);
+      m.castShadow = true; m.receiveShadow = true;
+      list.forEach((b, i) => {
+        dummy.position.set(b.x, b.y, b.z); dummy.rotation.set(0, b.ry !== undefined ? b.ry : r() * 6.28, 0); dummy.scale.set(b.sx, b.sy, b.sz);
+        dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); m.setColorAt(i, tmpColor.setHex(b.c));
+      });
+      group.add(m);
+      if (hull) { const h = new THREE.InstancedMesh(geo, hull, list.length); h.instanceMatrix = m.instanceMatrix; group.add(h); }
+      return m;
+    };
+    mk(blobGeo, blobs, hullTree);
+    mk(boxGeo, boxes, hullTree);
+    let am = null;
+    if (animals.length) {
+      am = new THREE.InstancedMesh(boxGeo, toon, animals.length);
+      am.castShadow = true;
+      animals.forEach((a, i) => am.setColorAt(i, tmpColor.setHex(a.c)));
+      group.add(am);
+    }
+    scene.add(group);
+    return { k, zc, group, animals: am ? { mesh: am, list: animals } : null };
+  }
+  function dropChunk(c) {
+    c.group.children.forEach(m => m.dispose && m.dispose());
+    scene.remove(c.group);
+  }
+  function syncChunks(camZ) {
+    const lo = Math.round(-(camZ + 30) / L), hi = Math.round(-(camZ - 30) / L);
+    for (const [k, c] of chunks) if (k < lo || k > hi) { dropChunk(c); chunks.delete(k); }
+    for (let k = lo; k <= hi; k++) if (!chunks.has(k)) chunks.set(k, buildChunk(k));
+  }
+  function clearChunks() { for (const c of chunks.values()) dropChunk(c); chunks.clear(); }
+
+  // ---------- clouds ----------
+  const clouds = [];
+  {
+    const r = rng(2024);
+    for (let i = 0; i < 7; i++) {
+      const g = new THREE.Group(), n = 9 + Math.floor(r() * 8);
+      for (let j = 0; j < n; j++) {
+        const s = .9 + r() * 1.3, pos = [(r() - .5) * 6, r() * .9, (r() - .5) * 4];
+        const m = new THREE.Mesh(cloudGeo, cloudMat);
+        m.scale.set(s, s * .62, s); m.position.set(...pos); m.castShadow = true;
+        const h = new THREE.Mesh(cloudGeo, hullCloud);
+        h.scale.copy(m.scale); h.position.copy(m.position);
+        g.add(m, h);
+      }
+      scene.add(g);
+      clouds.push({ g, drift: .2 + r() * .3 });
+    }
+  }
+  let cloudRng = rng(1);
+  function placeCloud(c, z, visible) {
+    c.g.position.set((cloudRng() - .5) * 46, 11 + cloudRng() * 6, z);
+    c.g.scale.setScalar(.7 + cloudRng() * .6);
+    c.g.visible = visible;
+  }
+
+  // ---------- plane ----------
+  const plane = new THREE.Group();
+  const planeMat = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: gradient(160) });
+  [[.16, .13, 1.05, 0, 0, 0], [1.3, .035, .26, 0, 0, -.05], [.5, .03, .14, 0, 0, .44], [.03, .22, .16, 0, .1, .45]].forEach(([sx, sy, sz, x, y, z]) => {
+    const m = new THREE.Mesh(boxGeo, planeMat); m.scale.set(sx, sy, sz); m.position.set(x, y, z); m.castShadow = true;
+    const h = new THREE.Mesh(boxGeo, hullPlane); h.scale.copy(m.scale); h.position.copy(m.position);
+    plane.add(m, h);
+  });
+  plane.scale.setScalar(1.6);
+  scene.add(plane);
+
+  // ================= the sheet: paper, frame, cartouches, seal =================
+  let OW = 1280, OH = 720, rect = { x: 0, y: 0, w: 0, h: 0 };
+  let paper, bokashi, frameLayer, labelLayer, labelsMode = 'zh';
+
+  function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+
+  function buildPaper() {
+    paper = makeCanvas(OW, OH);
+    const p = paper.getContext('2d'), r = rng(77), u = OH / 1080;
+    p.fillStyle = '#f2e8d2'; p.fillRect(0, 0, OW, OH);
+    const sw = Math.max(8, Math.round(OW / 8)), sh = Math.max(5, Math.round(OH / 8));
+    const small = makeCanvas(sw, sh), sc = small.getContext('2d'), img = sc.createImageData(sw, sh);
+    for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) {
+      const n = vnoise(x / sw * 9, y / sh * 5, 91) * .6 + vnoise(x / sw * 30, y / sh * 17, 92) * .4, i = (y * sw + x) * 4;
+      const v = (n - .5) * 22;
+      img.data[i] = 242 + v; img.data[i + 1] = 232 + v; img.data[i + 2] = 210 + v * 1.2; img.data[i + 3] = 150;
+    }
+    sc.putImageData(img, 0, 0);
+    p.imageSmoothingEnabled = true; p.drawImage(small, 0, 0, OW, OH);
+    const fibres = Math.round(OW * OH / 700);
+    p.lineCap = 'round';
+    for (let i = 0; i < fibres; i++) {
+      const x = r() * OW, y = r() * OH, len = (6 + r() * 22) * u, a = r() * 6.283, bend = (r() - .5) * len * .8;
+      const k = Math.min(1, u * 1.6);  // below ~700 px a fibre is thinner than a pixel; fade it rather than fatten it
+      p.strokeStyle = r() < .6 ? `rgba(255,252,243,${(.25 + r() * .3) * k})` : `rgba(176,158,120,${(.08 + r() * .12) * k})`;
+      p.lineWidth = Math.max(.5, (.5 + r() * .9) * u);
+      p.beginPath(); p.moveTo(x, y);
+      p.quadraticCurveTo(x + Math.cos(a) * len / 2 - Math.sin(a) * bend, y + Math.sin(a) * len / 2 + Math.cos(a) * bend, x + Math.cos(a) * len, y + Math.sin(a) * len);
+      p.stroke();
+    }
+    for (let i = 0; i < OW * OH / 60000; i++) {
+      p.fillStyle = `rgba(120,96,64,${.15 + r() * .25})`;
+      p.beginPath(); p.arc(r() * OW, r() * OH, (.4 + r() * 1.1) * u, 0, 6.283); p.fill();
+    }
+  }
+
+  function buildBokashi() {
+    // ichimonji bokashi: an indigo band wiped across the top of the block
+    const bh = Math.round(rect.h * .2);
+    bokashi = makeCanvas(rect.w, Math.max(1, bh));
+    const b = bokashi.getContext('2d'), g = b.createLinearGradient(0, 0, 0, bh);
+    g.addColorStop(0, 'rgb(96,128,172)'); g.addColorStop(.35, 'rgb(170,190,214)'); g.addColorStop(1, 'rgb(255,255,255)');
+    b.fillStyle = g; b.fillRect(0, 0, rect.w, bh);
+  }
+
+  function buildFrame() {
+    frameLayer = makeCanvas(OW, OH);
+    const f = frameLayer.getContext('2d'), u = OH / 1080, r = rng(5);
+    f.strokeStyle = '#2a2623'; f.lineWidth = Math.max(1, 2.4 * u);
+    f.strokeRect(rect.x, rect.y, rect.w, rect.h);
+    // seal: vermilion square, the character left as paper
+    const s = Math.round(64 * u), sx = rect.x + Math.round(28 * u), sy = rect.y + rect.h - s - Math.round(28 * u);
+    const seal = makeCanvas(s, s), c = seal.getContext('2d');
+    c.fillStyle = '#c8462c'; c.fillRect(0, 0, s, s);
+    c.globalCompositeOperation = 'destination-out';
+    c.lineWidth = Math.max(1, s * .06); c.strokeRect(s * .09, s * .09, s * .82, s * .82);
+    c.font = `700 ${Math.round(s * .64)}px "Noto Serif SC", "Songti SC", "STSong", "SimSun", serif`;
+    c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('空', s / 2, s * .54);
+    for (let i = 0; i < s * 3; i++) { c.beginPath(); c.arc(r() * s, r() * s, r() * s * .018, 0, 6.283); c.fill(); }
+    f.globalCompositeOperation = 'multiply'; f.globalAlpha = .92;
+    f.drawImage(seal, sx, sy);
+    f.globalAlpha = 1; f.globalCompositeOperation = 'source-over';
+  }
+
+  function cartouche(ctx, x, y, w, h, fill) {
+    const u = OH / 1080;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    ctx.drawImage(paper, x, y, w, h, x, y, w, h);
+    ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = fill; ctx.fillRect(x, y, w, h);
+    ctx.restore();
+    ctx.strokeStyle = '#2a2623'; ctx.lineWidth = Math.max(1, 2 * u); ctx.strokeRect(x, y, w, h);
+    ctx.lineWidth = Math.max(.6, 1 * u); const i = 5 * u; ctx.strokeRect(x + i, y + i, w - 2 * i, h - 2 * i);
+  }
+  function vtext(ctx, str, cx, y, size, gap) {
+    let yy = y;
+    for (const ch of str) { if (ch === ' ') { yy += size * .5; continue; } if (ch === '·') { yy += size * .55; continue; } ctx.fillText(ch, cx, yy + size / 2); yy += size + gap; }
+  }
+  const fmtCoord = (v, pos, neg) => Math.abs(v).toFixed(3) + '° ' + (v >= 0 ? pos : neg);
+
+  function buildLabels() {
+    labelLayer = null;
+    if (labelsMode === 'none') return;
+    labelLayer = makeCanvas(OW, OH);
+    const c = labelLayer.getContext('2d'), u = OH / 1080, b = biome;
+    const lat = b.lat + (h2(sd.seed, 1, 3) - .5) * .2, lon = b.lon + (h2(sd.seed, 2, 3) - .5) * .2;
+    const coords = fmtCoord(lat, 'N', 'S') + '  ' + fmtCoord(lon, 'E', 'W');
+    c.fillStyle = '#2a2623'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    if (labelsMode === 'zh') {
+      const pad = 30 * u, tw = 62 * u, th = 300 * u, x0 = rect.x + rect.w - pad - tw, y0 = rect.y + pad;
+      cartouche(c, x0, y0, tw, th, '#d9614a');
+      c.fillStyle = '#2a2623';
+      c.font = `700 ${Math.round(36 * u)}px "Noto Serif SC", "Songti SC", "STSong", serif`;
+      vtext(c, '空中名所', x0 + tw / 2, y0 + 26 * u, 36 * u, 22 * u);
+      const w2 = 104 * u, h2_ = 250 * u, x1 = x0 - 14 * u - w2;
+      cartouche(c, x1, y0, w2, h2_, '#eadba6');
+      c.fillStyle = '#2a2623';
+      c.font = `700 ${Math.round(40 * u)}px "Noto Serif SC", "Songti SC", "STSong", serif`;
+      vtext(c, b.zh, x1 + w2 * .64, y0 + 24 * u, 40 * u, 8 * u);
+      c.font = `700 ${Math.round(19 * u)}px "Noto Serif SC", "Songti SC", "STSong", serif`;
+      vtext(c, b.zhSeason, x1 + w2 * .25, y0 + 26 * u, 19 * u, 4 * u);
+      c.font = `500 ${Math.round(17 * u)}px "Cormorant Garamond", Georgia, serif`;
+      c.textAlign = 'right'; c.fillStyle = 'rgba(42,38,35,.8)';
+      c.fillText(coords, rect.x + rect.w - pad, rect.y + rect.h - pad);
+    } else {
+      const pad = 30 * u, w = 360 * u, h = 112 * u, x0 = rect.x + rect.w - pad - w, y0 = rect.y + pad;
+      cartouche(c, x0, y0, w, h, '#eadba6');
+      c.fillStyle = '#2a2623';
+      c.font = `600 ${Math.round(34 * u)}px "Cormorant Garamond", Georgia, serif`;
+      c.fillText(b.en, x0 + w / 2, y0 + 38 * u);
+      c.font = `italic 500 ${Math.round(21 * u)}px "Cormorant Garamond", Georgia, serif`;
+      c.fillText(b.enSeason, x0 + w / 2, y0 + 68 * u);
+      c.font = `500 ${Math.round(16 * u)}px "Cormorant Garamond", Georgia, serif`;
+      c.fillStyle = 'rgba(42,38,35,.75)';
+      c.fillText(coords, x0 + w / 2, y0 + 92 * u);
+    }
+  }
+
+  function setSize(w, h) {
+    OW = w; OH = h;
+    out.width = w; out.height = h;
+    const m = Math.round(h * .032);
+    rect = { x: m, y: m, w: w - 2 * m, h: h - 2 * m };
+    renderer.setSize(rect.w, rect.h, false);
+    camera.aspect = rect.w / rect.h;
+    camera.updateProjectionMatrix();
+    groundMat.uniforms.uUPP.value = VIEW_H / rect.h;
+    buildPaper(); buildBokashi(); buildFrame(); buildLabels();
+  }
+
+  // ================= timeline =================
+  const SPEED = 2.4;
+  let TL = { order: ORDER_DEFAULT, seg: 45, fade: 1.5, seed0: 1 };
+  let curIdx = -1, camZ = 0;
+
+  function setScene(idx) {
+    curIdx = idx;
+    biome = BIOMES[TL.order[idx % TL.order.length]];
+    const seed = TL.seed0 + idx;
+    sd = { seed, S: seed * 131, ph: seed * 1.7 };
+    groundMat.uniforms.uBiome.value = biome.id;
+    groundMat.uniforms.uS.value = sd.S;
+    groundMat.uniforms.uPh.value = sd.ph;
+    camZ = 0;
+    clearChunks();
+    syncChunks(camZ);
+    cloudRng = rng(seed * 31 + 7);
+    clouds.forEach((c, i) => placeCloud(c, 20 - i * (44 / Math.max(1, biome.clouds)) - cloudRng() * 4, i < biome.clouds));
+    buildLabels();
+  }
+
+  function veilAt(lt) {
+    const f = TL.fade, a = lt < f ? 1 - lt / f : TL.seg - lt < f ? 1 - (TL.seg - lt) / f : 0;
+    return a * a * (3 - 2 * a);
+  }
+
+  function update(t, dt) {
+    const idx = Math.floor(t / TL.seg), lt = t - idx * TL.seg;
+    if (idx !== curIdx) setScene(idx);
+    camZ = -SPEED * lt;
+    syncChunks(camZ);
+    for (const c of chunks.values()) {
+      if (!c.animals) continue;
+      const { mesh, list } = c.animals;
+      list.forEach((a, i) => {
+        a.h += Math.sin(lt * .7 + a.tw) * .25 * dt;
+        const nx = a.x + Math.sin(a.h) * a.v * dt, nz = a.z - Math.cos(a.h) * a.v * dt;
+        if (biome.isWater(nx, nz, sd) || Math.abs(nx) > W / 2 - 1 || Math.abs(nz - c.zc) > L / 2 - 1) a.h += Math.PI * .5;
+        else { a.x = nx; a.z = nz; }
+        const s = a.s;
+        dummy.position.set(a.x, .1 * s, a.z); dummy.rotation.set(0, -a.h, 0); dummy.scale.set(.24 * s, .2 * s, .55 * s);
+        dummy.updateMatrix(); mesh.setMatrixAt(i, dummy.matrix);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+    }
+    clouds.forEach((c, i) => {
+      if (i >= biome.clouds) return;
+      c.g.position.x += c.drift * dt;
+      if (c.g.position.z > camZ + 26) placeCloud(c, camZ - 26 - cloudRng() * 12, true);
+    });
+    camera.position.set(0, CAM_H, camZ);
+    camera.lookAt(0, 0, camZ);
+    sun.target.position.set(0, 0, camZ);
+    sun.position.copy(sun.target.position).addScaledVector(SUN_DIR, 80);
+    ground.position.z = camZ; shadowPlane.position.z = camZ;
+    const sw = lt * .21;
+    plane.position.set(Math.sin(sw) * 3, 7, camZ + 1.5);
+    plane.rotation.set(0, -Math.cos(sw) * .12, 0);
+    plane.rotateZ(-Math.cos(sw) * .35);
+    renderer.render(scene, camera);
+    composite(veilAt(lt));
+  }
+
+  function composite(veil) {
+    const o = octx;
+    o.globalCompositeOperation = 'source-over'; o.globalAlpha = 1;
+    o.drawImage(paper, 0, 0);
+    o.globalCompositeOperation = 'multiply';
+    o.drawImage(glCanvas, rect.x, rect.y, rect.w, rect.h);
+    o.drawImage(bokashi, rect.x, rect.y);
+    o.globalCompositeOperation = 'source-over';
+    if (veil > 0) { o.globalAlpha = veil; o.drawImage(paper, rect.x, rect.y, rect.w, rect.h, rect.x, rect.y, rect.w, rect.h); o.globalAlpha = 1; }
+    if (labelLayer && veil < 1) { o.globalAlpha = 1 - veil; o.drawImage(labelLayer, 0, 0); o.globalAlpha = 1; }
+    o.drawImage(frameLayer, 0, 0);
+  }
+
+  async function loadFonts() {
+    const want = ['700 40px "Noto Serif SC"', '600 30px "Cormorant Garamond"', 'italic 500 20px "Cormorant Garamond"'];
+    const text = '空中名所新潟潘帕斯塞伦盖蒂旁遮普春樱花映水田草原新绿旱季长草冬末芥菜花开·';
+    try { await Promise.race([Promise.all(want.map(f => document.fonts.load(f, text))), new Promise(r => setTimeout(r, 5000))]); } catch (e) { /* fall back to system faces */ }
+  }
+
+  // ================= public API (driven by render_flight.py) =================
+  let fps = 30;
+  window.FLIGHT = {
+    async init(o) {
+      document.body.classList.add('render');
+      await loadFonts();
+      fps = o.fps || 30;
+      labelsMode = o.labels || 'zh';
+      const order = (o.scenes && o.scenes.length ? o.scenes : ORDER_DEFAULT).filter(k => BIOMES[k]);
+      const n = Math.max(1, Math.round(o.duration / (o.segment || 45)));
+      TL = { order, seg: o.duration / n, fade: Math.min(1.5, o.duration / n * .15), seed0: o.seed || 1 };
+      curIdx = -1;
+      setSize(o.width, o.height);
+      return { scenes: n, segment: TL.seg, gl: renderer.capabilities.isWebGL2 ? 'webgl2' : 'webgl1' };
+    },
+    frame(i) { update(i / fps, 1 / fps); },
+    frameJPEG(i, q) { update(i / fps, 1 / fps); return out.toDataURL('image/jpeg', q || .94); }
+  };
+
+  // ================= preview (artifact page) =================
+  if (window.FLIGHT_RENDER) return;
+  const scenesEl = document.getElementById('scenes'), labelsEl = document.getElementById('labels');
+  const sceneBtns = ORDER_DEFAULT.map(k => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = BIOMES[k].en.split(',')[0];
+    b.addEventListener('click', () => {
+      const cur = Math.floor(t / TL.seg), target = ORDER_DEFAULT.indexOf(k);
+      let idx = cur + 1; while (idx % 4 !== target) idx++;
+      t = idx * TL.seg;
+    });
+    scenesEl.appendChild(b); return b;
+  });
+  const labelBtns = [['zh', '中文题签'], ['en', 'English'], ['none', 'No label']].map(([k, txt]) => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = txt;
+    b.addEventListener('click', () => { labelsMode = k; buildLabels(); labelBtns.forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
+    labelsEl.appendChild(b); return b;
+  });
+  labelBtns[0].setAttribute('aria-pressed', 'true');
+  let paused = false;
+  const pauseBtn = document.getElementById('pause');
+  pauseBtn.addEventListener('click', () => { paused = !paused; pauseBtn.setAttribute('aria-pressed', String(paused)); pauseBtn.textContent = paused ? 'Resume' : 'Pause'; });
+
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  TL = { order: ORDER_DEFAULT, seg: 24, fade: 1.2, seed0: 1 };
+  let t = 0, last = performance.now();
+  loadFonts().then(() => {
+    const big = out.clientWidth * (window.devicePixelRatio || 1) > 1500;
+    setSize(big ? 1920 : 1280, big ? 1080 : 720);
+    requestAnimationFrame(function loop(now) {
+      const dt = Math.min(.05, (now - last) / 1000); last = now;
+      if (!paused) t += dt * (reduce ? .4 : 1);
+      update(t, paused ? 0 : dt);
+      const active = biome;
+      sceneBtns.forEach((b, i) => b.setAttribute('aria-pressed', String(BIOMES[ORDER_DEFAULT[i]] === active)));
+      requestAnimationFrame(loop);
+    });
+  });
+})();
+</script>
