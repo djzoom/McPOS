@@ -7,6 +7,8 @@ flight.html 是渲染引擎（Three.js），本脚本用无头 Chromium 逐帧�
     python scripts/flight/render_flight.py --res 4k --duration 10m --out flight.mp4
     python scripts/flight/render_flight.py --res 256 --duration 30 --out tiny.mp4
     python scripts/flight/render_flight.py --res 1080p --duration 3h --unique 20m --out long.mp4
+    python scripts/flight/render_flight.py --res 4k --duration 3h --unique 20m --textless --pilot cat --flyer cub --out kat.mp4
+    python scripts/flight/render_flight.py --res 4k --duration 3h --unique 20m --textless --pilot cat --flyer cub --still 754 --out cover.png
 
 分辨率：--res 接受 4k / 2160p / 1440p / 1080p / 720p / 480p / 360p / 240p / 144p，
 或一个宽度数字（256–3840），高度按 16:9 推出并取偶数。
@@ -102,8 +104,18 @@ def render_clip(args, width: int, height: int, duration: float, out: Path) -> No
         info = page.evaluate("o => FLIGHT.init(o)", {
             "width": width, "height": height, "duration": duration, "fps": args.fps,
             "segment": args.segment, "seed": args.seed, "labels": args.labels, "scenes": args.scenes,
-            "flyer": args.flyer})
+            "flyer": args.flyer, "pilot": args.pilot, "seal": not args.no_seal})
         print(f"  引擎: {info['gl']} · {info['scenes']} 景 × {info['segment']:.1f}s · {width}×{height} · {frames} 帧", flush=True)
+
+        if args.still is not None:
+            # same timeline as the video, so the cover is exactly the frame the film shows at that second
+            i = min(frames - 1, round((args.still % duration) * args.fps))
+            url = page.evaluate("i => FLIGHT.stillPNG(i)", i)
+            out.write_bytes(base64.b64decode(url.split(",", 1)[1]))
+            browser.close()
+            if errors:
+                print("  页面报错:\n    " + "\n    ".join(errors[:10]), file=sys.stderr)
+            return
 
         proc = subprocess.Popen(ffmpeg, stdin=subprocess.PIPE)
         t0 = time.time()
@@ -129,8 +141,9 @@ def render_clip(args, width: int, height: int, duration: float, out: Path) -> No
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--out", required=True, type=Path, help="输出 .mp4")
-    ap.add_argument("--duration", required=True, type=parse_duration, help="总时长：90 / 10m / 1h30m / 01:30:00")
+    ap.add_argument("--out", required=True, type=Path, help="输出 .mp4（--still 时为 .png）")
+    ap.add_argument("--duration", type=parse_duration, default=None,
+                    help="总时长：90 / 10m / 1h30m / 01:30:00（出片必填；--still 时用来对齐同一条时间轴）")
     ap.add_argument("--res", default="1080p", type=parse_res, help="4k/1440p/1080p/720p/... 或宽度 256–3840（默认 1080p）")
     ap.add_argument("--fps", type=int, default=30)
     ap.add_argument("--segment", type=float, default=45, help="每一景大约多少秒（会微调到整除总时长，默认 45）")
@@ -141,6 +154,11 @@ def main() -> None:
                          "auto 按景配（新潟丹顶鹤×3、塞伦盖蒂 DC-3、普罗旺斯幼兽、布鲁日海鸥×6……）。可选："
                          + " / ".join(FLYERS[1:]))
     ap.add_argument("--labels", choices=("zh", "en", "none"), default="zh", help="题签：中文竖排 / 英文 / 不要")
+    ap.add_argument("--no-seal", action="store_true", help="不要左下角朱印")
+    ap.add_argument("--textless", action="store_true", help="画面不带任何文字：等于 --labels none --no-seal")
+    ap.add_argument("--pilot", choices=("none", "cat"), default="none", help="驾驶员：cat＝戴护目镜、系红围巾的橘猫（只对飞机生效）")
+    ap.add_argument("--still", type=parse_duration, default=None,
+                    help="只导出这一秒的无损 PNG（封面底图）。与同参数出的视频是同一帧")
     ap.add_argument("--unique", type=parse_duration, default=None,
                     help="只渲染这么长的不重样片段，再无缝循环铺满总时长（长片用）")
     ap.add_argument("--crf", type=int, default=18)
@@ -162,11 +180,23 @@ def main() -> None:
             ap.error(f"未知飞行物: {kind}（可选 {', '.join(FLYERS)}）")
         if n and (kind not in FLOCKS or not n.isdigit() or not 1 <= int(n) <= 31):
             ap.error(f"数量只能给鸟用，且在 1–31 之间: {spec}")
+    if args.textless:
+        args.labels, args.no_seal = "none", True
+    if args.duration is None:
+        if args.still is None:
+            ap.error("出片需要 --duration")
+        args.duration = max(args.segment * len(args.scenes), args.still + 1)
     width, height = args.res
     args.out = args.out.expanduser()
     args.out.parent.mkdir(parents=True, exist_ok=True)
 
     total = args.duration
+    if args.still is not None:
+        loops = math.ceil(total / args.unique) if args.unique and args.unique < total else 1
+        print(f"导出 {fmt_secs(args.still)} 处的封面帧")
+        render_clip(args, width, height, total / loops, args.out)
+        print(f"完成 → {args.out}")
+        return
     if args.unique and args.unique < total:
         loops = math.ceil(total / args.unique)
         clip_len = total / loops

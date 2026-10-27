@@ -56,6 +56,10 @@
 - `--duration`：`90` / `10m` / `1h30m` / `01:30:00`
 - `--segment`：每景秒数（默认 45，自动微调到整除总时长）；`--scenes` 景序（逗号分隔）；`--seed` 换一套地形
 - `--labels zh|en|none`：中文竖排题签 / 英文题签 / 无
+- `--textless`：画面不带任何文字（去题签、去朱印），用于把曲名等信息放在标题/描述/章节里的频道
+- `--pilot cat`：驾驶员换成戴护目镜、系红围巾的橘猫（替掉座舱盖；只对飞机生效，鸟忽略）
+- `--still 秒数`：只导出那一秒的无损 PNG 作封面底图。与同一组参数出的视频是**同一帧**
+  （含 `--unique` 循环换算），封面与视频可以分开做、但画面严格对应
 - `--unique`：只渲染这么长的不重样片段，再无缝循环铺满总时长。每景都从空白纸面淡入、
   淡出回纸面，所以循环接缝不可见；拼接用 `-c copy`，不重编码
 - 依赖：`playwright`（已在 requirements.txt，首次需 `playwright install chromium`）与 `ffmpeg`
@@ -67,3 +71,16 @@
 
 **速度**：耗时几乎全在 GPU。无 GPU 的云容器（SwiftShader 软件渲染）实测
 1080p 约 0.6 帧/秒、256 宽约 6 帧/秒；有 GPU 的机器会快得多。长片优先用 `--unique`。
+
+## 在不动工作区的前提下试用这个分支
+
+本地工作区有大量未提交改动时，别切分支，开一个独立工作树：
+
+```bash
+git fetch origin feat/flight-woodblock
+git worktree add ../McPOS-flight origin/feat/flight-woodblock
+cd ../McPOS-flight
+../McPOS/.venv/bin/python scripts/flight/render_flight.py --res 720p --duration 20 --textless --pilot cat --flyer cub --out /tmp/try.mp4
+```
+
+用完 `git worktree remove ../McPOS-flight`。

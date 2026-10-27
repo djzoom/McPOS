@@ -61,6 +61,7 @@
     <div class="group" id="flyers" role="group" aria-label="What flies"></div>
     <div class="group" role="group" aria-label="Flock size"><button id="fewer" type="button" aria-label="Fewer birds">−</button><span id="count" class="count"></span><button id="more" type="button" aria-label="More birds">+</button></div>
     <div class="group" id="labels" role="group" aria-label="Cartouche language"></div>
+    <button id="cat" type="button" aria-pressed="false">Cat pilot</button>
     <button id="pause" type="button" aria-pressed="false">Pause</button>
   </div>
 
@@ -840,12 +841,14 @@
   const MAT = {
     white: fm(0xffffff), shu: fm(0xc8462c), ink: fm(0x2a2623), cream: fm(0xefe3c8), sage: fm(0x93a06a), canopy: fm(0x5b7290),
     ai: fm(0x2f4f7f), goose: fm(0x8a7a66), gooseD: fm(0x4a4038), bill: fm(0x8c8a6a), gullGrey: fm(0xb3b9c0), yellow: fm(0xe3b23c),
-    sooty: fm(0x4a4642), pink: fm(0xe7a39a), cubYellow: fm(0xe8b93a), silver: fm(0xc9ccd0), navy: fm(0x51627a)
+    sooty: fm(0x4a4642), pink: fm(0xe7a39a), cubYellow: fm(0xe8b93a), silver: fm(0xc9ccd0), navy: fm(0x51627a),
+    tabby: fm(0xe08a3c), tabbyD: fm(0xa95a22), leather: fm(0x6b4a33)
   };
   function part(parent, geo, mat, s, p, rot, hull = true) {
     const m = new THREE.Mesh(geo, mat); m.scale.set(...s); m.position.set(...p); if (rot) m.rotation.set(...rot); m.castShadow = true;
+    m.userData.canopy = mat === MAT.canopy;
     parent.add(m);
-    if (hull) { const h = new THREE.Mesh(geo, hullPlane); h.scale.copy(m.scale); h.position.copy(m.position); h.rotation.copy(m.rotation); parent.add(h); }
+    if (hull) { const h = new THREE.Mesh(geo, hullPlane); h.scale.copy(m.scale); h.position.copy(m.position); h.rotation.copy(m.rotation); h.userData.canopy = m.userData.canopy; parent.add(h); }
     return m;
   }
   const sway = (g, lt, y, amp, roll) => {
@@ -986,6 +989,37 @@
     return { g, kind, update(lt) { sway(g, lt, y, 3, roll); props.forEach((p, i) => { p.rotation.z = lt * 45 + i; }); } };
   }
 
+  // ---------- the pilot: an orange tabby with goggles and a red scarf, sitting where the canopy was ----------
+  const earGeo = new THREE.ConeGeometry(1, 1, 3);
+  const COCKPIT = { spitfire: [0, .07, -.12], biplane: [0, .1, .16], cub: [0, .09, .1], cessna: [0, .07, -.3], mustang: [0, .07, -.1], dc3: [0, .06, -.58], constellation: [0, .06, -.8], catalina: [0, .07, -.4] };
+  const CAT_HEAD = .6;    // world units across the head: cartoon-large so it reads from 50 m up
+  function addPilot(f) {
+    const at = COCKPIT[f.kind];
+    if (!at) return null;
+    f.g.traverse(o => { if (o.userData.canopy) o.visible = false; });
+    const cat = new THREE.Group(), scarf = [];
+    part(cat, blobGeo, MAT.leather, [.55, .3, .45], [0, -.25, .3]);
+    part(cat, blobGeo, MAT.tabby, [.5, .4, .45], [0, 0, 0]);
+    part(cat, blobGeo, MAT.cream, [.22, .15, .18], [0, -.06, -.36]);
+    part(cat, blobGeo, MAT.pink, [.06, .04, .05], [0, .05, -.5], null, false);
+    [-1, 1].forEach(sg => {
+      part(cat, earGeo, MAT.tabby, [.22, .4, .2], [sg * .36, .26, .02], [0, 0, -sg * .75]);
+      part(cat, discGeo, MAT.canopy, [.12, 1, .12], [sg * .17, .41, -.2], null, false);
+      part(cat, discGeo, MAT.ink, [.15, 1, .15], [sg * .17, .405, -.2], null, false);
+    });
+    [-.16, 0, .16].forEach(x => part(cat, boxGeo, MAT.tabbyD, [.07, .02, .34], [x, .41, .12], null, false));
+    let link = cat;
+    for (let j = 0; j < 4; j++) {
+      const seg = new THREE.Group(); seg.position.set(j ? 0 : .12, j ? 0 : -.12, j ? .2 : .36);
+      part(seg, boxGeo, MAT.shu, [.13, .035, .22], [0, 0, .1]);
+      link.add(seg); scarf.push(seg); link = seg;
+    }
+    cat.scale.setScalar(CAT_HEAD / f.g.scale.x);
+    cat.position.set(...at);
+    f.g.add(cat);
+    return lt => scarf.forEach((sg, j) => { sg.rotation.y = Math.sin(lt * 7 - j * .9) * (.25 + j * .08); });
+  }
+
   // one bird; both wings are driven by the same phase, so they rise, fall, open and fold together
   function bird(o) {
     const g = new THREE.Group(), s = 1;
@@ -1066,27 +1100,28 @@
   const CLASSICS = ['cub', 'cessna', 'mustang', 'dc3', 'constellation', 'catalina'];
   function makeFlyer(spec) {
     const [raw, cnt] = spec.split(':'), kind = raw === 'plane' ? 'spitfire' : raw;
-    if (kind === 'biplane') return { ...biplane(), kind };
-    if (CLASSICS.includes(kind)) return classic(kind);
     if (BIRDS[kind]) return flock(kind, Math.max(1, Math.min(31, parseInt(cnt, 10) || BIRDS[kind].n)));
-    return { ...spitfire(), kind: 'spitfire' };
+    const f = kind === 'biplane' ? { ...biplane(), kind } : CLASSICS.includes(kind) ? classic(kind) : { ...spitfire(), kind: 'spitfire' };
+    const pilot = pilotMode === 'cat' ? addPilot(f) : null;
+    if (pilot) { const fly = f.update; f.update = lt => { fly(lt); pilot(lt); }; }
+    return f;
   }
   const AUTO_FLYER = { niigata: 'crane:3', pampa: 'albatross:2', serengeti: 'dc3', punjab: 'geese:13', tuscany: 'spitfire', bruges: 'gull:6', provence: 'cub', krumlov: 'stork:2' };
-  let flyerMode = ['auto'], flyer = null, flyerSpec = '';
+  let flyerMode = ['auto'], flyer = null, flyerSpec = '', pilotMode = 'none';
   function flyerFor(idx) {
     const m = flyerMode[idx % flyerMode.length];
     return m === 'auto' ? AUTO_FLYER[TL.order[idx % TL.order.length]] : m;
   }
   function setFlyer(spec) {
-    if (flyer && spec === flyerSpec) return;
+    if (flyer && spec + pilotMode === flyerSpec) return;
     if (flyer) scene.remove(flyer.g);
-    flyer = makeFlyer(spec); flyerSpec = spec;
+    flyer = makeFlyer(spec); flyerSpec = spec + pilotMode;
     scene.add(flyer.g);
   }
 
   // ================= the sheet: paper, frame, cartouches, seal =================
   let OW = 1280, OH = 720, rect = { x: 0, y: 0, w: 0, h: 0 };
-  let paper, bokashi, frameLayer, labelLayer, edgeMask, work, labelsMode = 'zh';
+  let paper, bokashi, frameLayer, labelLayer, edgeMask, work, labelsMode = 'zh', sealOn = true;
 
   function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
 
@@ -1158,6 +1193,7 @@
     }
     e.globalAlpha = 1; e.globalCompositeOperation = 'source-over';
     work = makeCanvas(OW, OH);
+    if (!sealOn) return;
     // seal: vermilion square, the character left as paper
     const s = Math.round(64 * u), sx = rect.x + Math.round(28 * u), sy = rect.y + rect.h - s - Math.round(28 * u);
     const seal = makeCanvas(s, s), c = seal.getContext('2d');
@@ -1269,7 +1305,7 @@
     return a * a * (3 - 2 * a);
   }
 
-  function update(t, dt) {
+  function update(t, dt, draw = true) {
     const idx = Math.floor(t / TL.seg), lt = t - idx * TL.seg;
     if (idx !== curIdx) setScene(idx);
     camZ = -SPEED * lt;
@@ -1301,6 +1337,7 @@
     sun.position.copy(sun.target.position).addScaledVector(SUN_DIR, 80);
     ground.position.z = camZ; shadowPlane.position.z = camZ;
     flyer.update(lt);
+    if (!draw) return;
     renderer.render(scene, camera);
     composite(veilAt(lt));
   }
@@ -1343,6 +1380,8 @@
       await loadFonts();
       fps = o.fps || 30;
       labelsMode = o.labels || 'zh';
+      sealOn = o.seal !== false;
+      pilotMode = o.pilot || 'none';
       flyerMode = o.flyer && o.flyer.length ? o.flyer : ['auto'];
       const order = (o.scenes && o.scenes.length ? o.scenes : ORDER_DEFAULT).filter(k => BIOMES[k]);
       const n = Math.max(1, Math.round(o.duration / (o.segment || 45)));
@@ -1352,7 +1391,9 @@
       return { scenes: n, segment: TL.seg, gl: renderer.capabilities.isWebGL2 ? 'webgl2' : 'webgl1' };
     },
     frame(i) { update(i / fps, 1 / fps); },
-    frameJPEG(i, q) { update(i / fps, 1 / fps); return out.toDataURL('image/jpeg', q || .94); }
+    frameJPEG(i, q) { update(i / fps, 1 / fps); return out.toDataURL('image/jpeg', q || .94); },
+    // a cover frame: walk the timeline without drawing, then draw frame i losslessly
+    stillPNG(i) { for (let k = 0; k < i; k++) update(k / fps, 1 / fps, false); update(i / fps, 1 / fps); return out.toDataURL('image/png'); }
   };
 
   // ================= preview (artifact page) =================
@@ -1397,6 +1438,8 @@
       flyerBtns.forEach(x => x.setAttribute('aria-pressed', String(x.dataset.k === pickedFlyer)));
     });
   });
+  const catBtn = document.getElementById('cat');
+  catBtn.addEventListener('click', () => { pilotMode = pilotMode === 'cat' ? 'none' : 'cat'; catBtn.setAttribute('aria-pressed', String(pilotMode === 'cat')); setFlyer(flyerFor(curIdx)); });
   let paused = false;
   const pauseBtn = document.getElementById('pause');
   pauseBtn.addEventListener('click', () => { paused = !paused; pauseBtn.setAttribute('aria-pressed', String(paused)); pauseBtn.textContent = paused ? 'Resume' : 'Pause'; });
